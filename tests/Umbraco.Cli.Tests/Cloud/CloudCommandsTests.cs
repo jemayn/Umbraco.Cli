@@ -1,0 +1,250 @@
+using System.Net;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using NUnit.Framework;
+using Umbraco.Cli.Cloud;
+using Umbraco.Cli.Cloud.Api;
+using Umbraco.Cli.Infrastructure;
+using Umbraco.Cli.Infrastructure.Processes;
+using Umbraco.Cli.Tests.TestHelpers;
+
+namespace Umbraco.Cli.Tests.Cloud;
+
+[TestFixture]
+public class CloudCommandsTests
+{
+    private FakeEnvironment _environment = null!;
+    private FakeHttpMessageHandler _handler = null!;
+    private Mock<IGit> _git = null!;
+    private string _directory = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _directory = Path.Combine(Path.GetTempPath(), $"umbraco-cli-tests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_directory);
+        _environment = new FakeEnvironment(_directory);
+        _environment.Variables[CloudCredentialsResolver.ProjectIdVariable] = "project-1";
+        _environment.Variables[CloudCredentialsResolver.ApiKeyVariable] = "key-1";
+        _handler = new FakeHttpMessageHandler();
+        _git = new Mock<IGit>();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _handler.Dispose();
+        Directory.Delete(_directory, recursive: true);
+    }
+
+    [Test]
+    public async Task Upload_File_WritesArtifactAsJson()
+    {
+        string zip = Path.Combine(_directory, "site.zip");
+        await File.WriteAllTextAsync(zip, "zip");
+        _handler.Respond(HttpStatusCode.OK, """{ "artifactId": "a-1", "fileName": "site.zip", "fileSize": 3 }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "upload", "--file", zip, "-o", "json");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(JsonNode.Parse(result.Stdout)!["artifactId"]!.GetValue<string>(), Is.EqualTo("a-1"));
+        Assert.That(_handler.Requests.Single().Headers[CloudApiClient.ApiKeyHeaderName], Is.EqualTo("key-1"));
+    }
+
+    [Test]
+    public async Task Upload_OptionsOverrideEnvironmentVariables()
+    {
+        string zip = Path.Combine(_directory, "site.zip");
+        await File.WriteAllTextAsync(zip, "zip");
+        _handler.Respond(HttpStatusCode.OK, """{ "artifactId": "a-1", "fileSize": 3 }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "upload", "--file", zip, "--project-id", "project-2", "--api-key", "key-2");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(result.Stdout.Trim(), Is.EqualTo("Artifact a-1 uploaded (3 B)."));
+        RecordedRequest request = _handler.Requests.Single();
+        Assert.That(request.Uri.AbsolutePath, Is.EqualTo("/v2/projects/project-2/deployments/artifacts"));
+        Assert.That(request.Headers[CloudApiClient.ApiKeyHeaderName], Is.EqualTo("key-2"));
+    }
+
+    [Test]
+    public async Task Upload_NotAZip_ReturnsUsageExitCode()
+    {
+        string file = Path.Combine(_directory, "site.tar");
+        await File.WriteAllTextAsync(file, "tar");
+
+        CliResult result = await RunAsync("cloud", "deployments", "upload", "--file", file);
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(_handler.Requests, Is.Empty);
+    }
+
+    [Test]
+    public async Task Upload_SourceWithoutDotUmbraco_WarnsButUploads()
+    {
+        string source = Path.Combine(_directory, "src");
+        Directory.CreateDirectory(source);
+        await File.WriteAllTextAsync(Path.Combine(source, "Site.csproj"), "<Project />");
+        _git.Setup(x => x.ListFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(["Site.csproj"]);
+        _handler.Respond(HttpStatusCode.OK, """{ "artifactId": "a-1", "fileSize": 100 }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "upload", "--path", source);
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("warning: The source code has no .umbraco file"));
+    }
+
+    [Test]
+    public async Task Deploy_SourceWithoutDotUmbraco_FailsBeforeUploading()
+    {
+        string source = Path.Combine(_directory, "src");
+        Directory.CreateDirectory(source);
+        await File.WriteAllTextAsync(Path.Combine(source, "Site.csproj"), "<Project />");
+        _git.Setup(x => x.ListFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(["Site.csproj"]);
+
+        CliResult result = await RunAsync("cloud", "deployments", "deploy", "--path", source, "--environment", "dev");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("--skip-preserve-umbraco-cloud-json"));
+        Assert.That(_handler.Requests, Is.Empty);
+    }
+
+    [Test]
+    public async Task Deploy_ArtifactId_StartsDeploymentAndWaitsUntilCompleted()
+    {
+        _git.Setup(x => x.GetHeadSubjectAsync(_directory, It.IsAny<CancellationToken>())).ReturnsAsync("Add the header");
+        _handler
+            .Respond(HttpStatusCode.Created, """{ "deploymentId": "d-1", "environmentAlias": "stage", "deploymentState": "Pending" }""")
+            .Respond(HttpStatusCode.OK, """
+                {
+                  "deploymentId": "d-1",
+                  "environmentAlias": "stage",
+                  "deploymentState": "Completed",
+                  "createdUtc": "2026-09-30T12:00:00Z",
+                  "completedUtc": "2026-09-30T12:06:12Z",
+                  "deploymentStatusMessages": [ { "message": "Done", "timestampUtc": "2026-09-30T12:06:12Z" } ]
+                }
+                """);
+
+        CliResult result = await RunAsync("cloud", "deployments", "deploy", "--artifact-id", "a-1", "--environment", "stage", "--no-build-and-restore");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(result.Stdout.Trim(), Is.EqualTo("Deployment d-1 to stage: Completed in 6m 12s."));
+        Assert.That(result.Stderr, Does.Contain("Done"));
+        JsonNode body = JsonNode.Parse(_handler.Requests[0].BodyText)!;
+        Assert.That(body["commitMessage"]!.GetValue<string>(), Is.EqualTo("Add the header"));
+        Assert.That(body["noBuildAndRestore"]!.GetValue<bool>(), Is.True);
+        Assert.That(_handler.Requests[1].Uri.AbsolutePath, Is.EqualTo("/v2/projects/project-1/deployments/d-1"));
+    }
+
+    [Test]
+    public async Task Deploy_Failed_ReturnsDeploymentFailedExitCode()
+    {
+        _handler
+            .Respond(HttpStatusCode.Created, """{ "deploymentId": "d-1", "deploymentState": "Queued" }""")
+            .Respond(HttpStatusCode.OK, """{ "deploymentId": "d-1", "deploymentState": "Failed" }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "deploy", "--artifact-id", "a-1", "--environment", "stage", "-m", "Try", "--verbose");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.DeploymentFailed), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("error: Deployment d-1 failed."));
+    }
+
+    [Test]
+    public async Task Deploy_NoWait_ReturnsAfterStarting()
+    {
+        _handler.Respond(HttpStatusCode.Created, """{ "deploymentId": "d-1", "deploymentState": "Pending" }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "deploy", "--artifact-id", "a-1", "--environment", "stage", "--no-wait", "-o", "json");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(JsonNode.Parse(result.Stdout)!["deploymentState"]!.GetValue<string>(), Is.EqualTo("Pending"));
+        Assert.That(_handler.Requests, Has.Count.EqualTo(1));
+        _git.Verify(x => x.GetHeadSubjectAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
+    public async Task Deploy_File_UploadsFirstAndIncludesArtifactIdInJson()
+    {
+        string zip = Path.Combine(_directory, "site.zip");
+        await File.WriteAllTextAsync(zip, "zip");
+        _handler
+            .Respond(HttpStatusCode.OK, """{ "artifactId": "a-9", "fileSize": 3 }""")
+            .Respond(HttpStatusCode.Created, """{ "deploymentId": "d-1", "deploymentState": "Pending" }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "deploy", "--file", zip, "--environment", "dev", "--no-wait", "-o", "json");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(JsonNode.Parse(result.Stdout)!["artifactId"]!.GetValue<string>(), Is.EqualTo("a-9"));
+        Assert.That(result.Stderr, Does.Contain("Artifact a-9 uploaded."));
+        Assert.That(JsonNode.Parse(_handler.Requests[1].BodyText)!["artifactId"]!.GetValue<string>(), Is.EqualTo("a-9"));
+        Assert.That(JsonNode.Parse(_handler.Requests[1].BodyText)!["commitMessage"]!.GetValue<string>(), Is.EqualTo(DeployCommandHandler.DefaultCommitMessage));
+    }
+
+    [Test]
+    public async Task Deploy_File_TextResultIncludesTheArtifactId()
+    {
+        string zip = Path.Combine(_directory, "site.zip");
+        await File.WriteAllTextAsync(zip, "zip");
+        _handler
+            .Respond(HttpStatusCode.OK, """{ "artifactId": "a-9", "fileSize": 3 }""")
+            .Respond(HttpStatusCode.Created, """{ "deploymentId": "d-1", "environmentAlias": "dev", "deploymentState": "Pending" }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "deploy", "--file", zip, "--environment", "dev", "--no-wait");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(result.Stdout.Trim(), Is.EqualTo("Deployment d-1 of artifact a-9 to dev: Pending."));
+    }
+
+    [TestCase]
+    [TestCase("--artifact-id", "a-1", "--file", "x.zip")]
+    public async Task Deploy_NotExactlyOneSource_ReturnsUsageExitCode(params string[] sourceArguments)
+    {
+        CliResult result = await RunAsync(["cloud", "deployments", "deploy", "--environment", "dev", .. sourceArguments]);
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("Specify exactly one of --artifact-id, --file or --path."));
+    }
+
+    [Test]
+    public async Task Deploy_InvalidTimeout_ReturnsUsageExitCode()
+    {
+        CliResult result = await RunAsync("cloud", "deployments", "deploy", "--artifact-id", "a-1", "--environment", "dev", "--timeout", "soon");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("'soon' is not a valid duration"));
+    }
+
+    [Test]
+    public async Task Show_WritesDeploymentState()
+    {
+        _handler.Respond(HttpStatusCode.OK, """{ "deploymentId": "d-1", "deploymentState": "InProgress" }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "show", "d-1");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(result.Stdout.Trim(), Is.EqualTo("Deployment d-1: InProgress."));
+    }
+
+    [Test]
+    public async Task Show_Unauthorized_ReturnsAuthenticationExitCode()
+    {
+        _handler.Respond(HttpStatusCode.Unauthorized);
+
+        CliResult result = await RunAsync("cloud", "deployments", "show", "d-1");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.AuthenticationFailed), result.ToString());
+        Assert.That(result.Stderr, Does.Not.Contain("key-1"));
+    }
+
+    private Task<CliResult> RunAsync(params string[] args)
+        => CliRunner.RunAsync(
+            _environment,
+            services =>
+            {
+                services.AddSingleton(_git.Object);
+                services.AddHttpClient<ICloudApiClient, CloudApiClient>().ConfigurePrimaryHttpMessageHandler(() => _handler);
+            },
+            args);
+}

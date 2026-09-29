@@ -1,0 +1,5 @@
+# Normalize line endings in the repository, but check out with the platform's native endings
+* text=auto
+
+# Shell scripts must keep LF endings to stay runnable on non-Windows platforms.
+*.sh text eol=lf
