@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using Umbraco.Cli.Infrastructure;
 using Umbraco.Cli.Infrastructure.Processes;
 
@@ -43,60 +42,26 @@ internal sealed class DeployPackageDetector
 
     internal static DetectedPackage FindDeployPackage(string packageListJson, string projectPath)
     {
-        var found = new Dictionary<DeployPackage, DetectedPackage>();
-        using JsonDocument document = JsonDocument.Parse(packageListJson);
-        foreach (JsonElement package in EnumeratePackages(document.RootElement))
+        PackageList packages = PackageList.Parse(packageListJson);
+        var found = new List<DetectedPackage>();
+        if (packages.All.TryGetValue(OnPremisesPackageId, out string? onPremisesVersion))
         {
-            string? id = package.TryGetProperty("id", out JsonElement idElement) ? idElement.GetString() : null;
-            string version = package.TryGetProperty("resolvedVersion", out JsonElement versionElement) ? versionElement.GetString() ?? string.Empty : string.Empty;
-            if (string.Equals(id, OnPremisesPackageId, StringComparison.OrdinalIgnoreCase))
-            {
-                found.TryAdd(DeployPackage.OnPremises, new DetectedPackage(DeployPackage.OnPremises, OnPremisesPackageId, version));
-            }
-            else if (string.Equals(id, CloudPackageId, StringComparison.OrdinalIgnoreCase))
-            {
-                found.TryAdd(DeployPackage.Cloud, new DetectedPackage(DeployPackage.Cloud, CloudPackageId, version));
-            }
+            found.Add(new DetectedPackage(DeployPackage.OnPremises, OnPremisesPackageId, onPremisesVersion));
+        }
+
+        if (packages.All.TryGetValue(CloudPackageId, out string? cloudVersion))
+        {
+            found.Add(new DetectedPackage(DeployPackage.Cloud, CloudPackageId, cloudVersion));
         }
 
         return found.Count switch
         {
-            1 => found.Values.Single(),
+            1 => found[0],
             0 => throw new UsageException(
                 $"'{Path.GetFileName(projectPath)}' doesn't reference {OnPremisesPackageId} or {CloudPackageId}.",
                 $"Install Umbraco Deploy first, for example with 'dotnet add package {OnPremisesPackageId}'."),
             _ => throw new UsageException(
                 $"'{Path.GetFileName(projectPath)}' references both {OnPremisesPackageId} and {CloudPackageId}; a site must use only one of them."),
         };
-    }
-
-    private static IEnumerable<JsonElement> EnumeratePackages(JsonElement root)
-    {
-        if (root.TryGetProperty("projects", out JsonElement projects) is false || projects.ValueKind != JsonValueKind.Array)
-        {
-            yield break;
-        }
-
-        foreach (JsonElement project in projects.EnumerateArray())
-        {
-            if (project.TryGetProperty("frameworks", out JsonElement frameworks) is false || frameworks.ValueKind != JsonValueKind.Array)
-            {
-                continue;
-            }
-
-            foreach (JsonElement framework in frameworks.EnumerateArray())
-            {
-                foreach (string list in new[] { "topLevelPackages", "transitivePackages" })
-                {
-                    if (framework.TryGetProperty(list, out JsonElement packages) && packages.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (JsonElement package in packages.EnumerateArray())
-                        {
-                            yield return package;
-                        }
-                    }
-                }
-            }
-        }
     }
 }

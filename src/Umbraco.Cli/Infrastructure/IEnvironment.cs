@@ -7,6 +7,11 @@ internal interface IEnvironment
 {
     string CurrentDirectory { get; }
 
+    /// <summary>
+    /// Gets the directory the CLI caches data in (such as template stores).
+    /// </summary>
+    string CacheDirectory { get; }
+
     bool IsInputRedirected { get; }
 
     bool IsErrorRedirected { get; }

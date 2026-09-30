@@ -6,4 +6,8 @@ namespace Umbraco.Cli.Infrastructure.Output;
 internal interface IPrompter
 {
     Task<string> SelectAsync(string title, IReadOnlyList<string> choices, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<string>> SelectManyAsync(string title, IReadOnlyList<string> choices, CancellationToken cancellationToken);
+
+    Task<string> AskAsync(string question, string defaultValue, CancellationToken cancellationToken);
 }

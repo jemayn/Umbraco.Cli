@@ -15,6 +15,10 @@
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
   </ItemGroup>
+  <!-- NuGet packages (NuGet.Versioning only: NuGet.Protocol isn't trim-safe, see ADR 0005) -->
+  <ItemGroup>
+    <PackageVersion Include="NuGet.Versioning" Version="7.9.0" />
+  </ItemGroup>
   <!-- Third-party packages -->
   <ItemGroup>
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />

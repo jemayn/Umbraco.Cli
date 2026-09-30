@@ -3,6 +3,7 @@
 A cross-platform command-line tool for Umbraco products and services in development and CI pipelines. Commands are grouped by product or service:
 
 ```
+umbraco cloud init
 umbraco cloud deployments upload|deploy|show
 umbraco deploy init
 ```
@@ -15,6 +16,31 @@ Requires the [.NET SDK 10](https://dotnet.microsoft.com/download) or later.
 dotnet tool install --global Umbraco.Cli
 umbraco --help
 ```
+
+## Preparing an Umbraco project for Umbraco Cloud
+
+`umbraco cloud init` adds the Umbraco Cloud packages (`Umbraco.Cloud.Cms`, `Umbraco.Cloud.StorageProviders.AzureBlob` and `Umbraco.Deploy.Cloud`) to an Umbraco project, with versions compatible with its Umbraco CMS version, plus the Umbraco Cloud licence settings and `umbraco-cloud.json`. Run it in the project's directory (or use `--project`); Umbraco 17 and later are supported.
+
+```sh
+umbraco cloud init --add forms
+```
+
+`--deployment-type` sets how the project is deployed to Umbraco Cloud: `artifact` (default) for published output, or `git` for source code, which also writes the `.umbraco` file Umbraco Cloud builds from (and, for a new project, the Cloud `README.md`).
+
+With `--name`, it first creates a new Umbraco project laid out like a new Cloud project (`src/<name>`, central package management, `.gitignore` files, the Cloud settings and a solution file):
+
+```sh
+umbraco cloud init --name MySite --version lts --add forms -- --development-database-type SQLite
+```
+
+- `.gitignore`: the .NET one (`dotnet new gitignore`) at the repository root and the template's Umbraco-specific one (with the Umbraco Deploy trigger files) in the project; `--exclude-gitignore` creates neither.
+- `--development-mode`: `ide` (default: Production runtime mode, with models as source code, suited to deploying published output) or `backoffice` (as a new Cloud project).
+- `--version`: `latest` (default), `lts`, `rc`, `beta`, `next`, a major (`17`), a major.minor (`17.2`) or an exact version. It warns about versions that only receive security fixes and refuses end-of-life versions (unless `--allow-end-of-life`).
+- `--add <product>`: add a Product (currently `forms`, which also adds `Umbraco.Forms.Deploy`). Packages that are already referenced are never changed.
+- Options after `--` are passed to `dotnet new umbraco`; the Umbraco.Templates version is installed in the CLI's own template store, so your installed templates don't change.
+- `umbraco-cloud.json` gets placeholder Umbraco ID values. They're only used for local login (Umbraco Cloud environments get their own values through environment variables), so locally the backoffice login works, but Umbraco ID login needs the real local-login values from a cloned Cloud project's `umbraco-cloud.json`. Use `--identity-client-id`/`--identity-client-secret` (or `UMBRACO_CLOUD_IDENTITY_CLIENT_ID`/`UMBRACO_CLOUD_IDENTITY_CLIENT_SECRET`) to provide real values.
+- It restores and builds the project afterwards (`--no-build` to skip the build).
+- Then run `umbraco deploy init` (the ApiSecret for Umbraco Deploy) and run the project locally once before publishing it, so Umbraco installs and Umbraco Deploy writes the schema (`umbraco/Deploy/Revision`) that is deployed.
 
 ## Umbraco Cloud deployments
 

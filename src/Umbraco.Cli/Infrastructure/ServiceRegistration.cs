@@ -3,11 +3,14 @@ using Spectre.Console;
 using Umbraco.Cli.Cloud;
 using Umbraco.Cli.Cloud.Api;
 using Umbraco.Cli.Cloud.Artifacts;
+using Umbraco.Cli.Cloud.Init;
 using Umbraco.Cli.Deploy;
 using Umbraco.Cli.Deploy.Configuration;
 using Umbraco.Cli.Deploy.ProjectDetection;
+using Umbraco.Cli.Infrastructure.NuGet;
 using Umbraco.Cli.Infrastructure.Output;
 using Umbraco.Cli.Infrastructure.Processes;
+using Umbraco.Cli.Releases;
 
 namespace Umbraco.Cli.Infrastructure;
 
@@ -53,6 +56,16 @@ internal static class ServiceRegistration
         services.AddTransient<UploadCommandHandler>();
         services.AddTransient<DeployCommandHandler>();
         services.AddTransient<ShowCommandHandler>();
+
+        // NuGet and Umbraco releases (the registration API is served gzip-compressed)
+        services.AddHttpClient<INuGetClient, NuGetClient>()
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AutomaticDecompression = System.Net.DecompressionMethods.All });
+        services.AddSingleton<UmbracoReleases>();
+        services.AddSingleton<PackageVersionResolver>();
+
+        // umbraco cloud init
+        services.AddTransient<UmbracoProjectCreator>();
+        services.AddTransient<CloudInitCommandHandler>();
 
         // Umbraco Deploy
         services.AddSingleton<Func<string>>(ApiSecret.Generate);

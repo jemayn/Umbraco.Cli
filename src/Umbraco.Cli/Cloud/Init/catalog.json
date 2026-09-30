@@ -1,0 +1,30 @@
+{
+  "requiredPackages": [
+    "Umbraco.Cloud.Cms",
+    "Umbraco.Cloud.StorageProviders.AzureBlob"
+  ],
+  "products": [
+    {
+      "key": "deploy",
+      "name": "Umbraco Deploy",
+      "packages": [ "Umbraco.Deploy.Cloud" ],
+      "licenseKey": "Umbraco.Deploy",
+      "required": true
+    },
+    {
+      "key": "forms",
+      "name": "Umbraco Forms",
+      "packages": [ "Umbraco.Forms" ],
+      "licenseKey": "Umbraco.Forms"
+    }
+  ],
+  "integrationPackages": [
+    {
+      "package": "Umbraco.Forms.Deploy",
+      "products": [ "forms", "deploy" ]
+    }
+  ],
+  "scaffold": {
+    "verifiedMajors": [ 17, 18 ]
+  }
+}

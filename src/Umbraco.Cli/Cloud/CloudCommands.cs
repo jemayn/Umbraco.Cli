@@ -20,7 +20,7 @@ internal static class CloudCommands
             CreateShowCommand(services),
         };
 
-        return new Command("cloud", "Work with Umbraco Cloud projects.") { deployments };
+        return new Command("cloud", "Work with Umbraco Cloud projects.") { Init.CloudInitCommand.Create(services), deployments };
     }
 
     private static Command CreateUploadCommand(Func<IServiceProvider> services)

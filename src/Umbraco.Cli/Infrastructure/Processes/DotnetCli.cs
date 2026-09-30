@@ -38,6 +38,18 @@ internal sealed class DotnetCli : IDotnetCli
         return result.StandardOutput;
     }
 
+    public async Task<ProcessResult> RunAsync(IReadOnlyList<string> arguments, string workingDirectory, CancellationToken cancellationToken)
+    {
+        ProcessResult result = await _processRunner.RunAsync("dotnet", arguments, workingDirectory, cancellationToken);
+        if (result.ExitCode != 0)
+        {
+            string command = string.Join(' ', arguments.Take(3));
+            throw new CliException($"'dotnet {command}' failed (exit code {result.ExitCode}): {FirstNonEmpty(result.StandardError, result.StandardOutput)}");
+        }
+
+        return result;
+    }
+
     private static string FirstNonEmpty(params string[] values)
         => values.Select(value => value.Trim()).FirstOrDefault(value => value.Length > 0) ?? "no output";
 }

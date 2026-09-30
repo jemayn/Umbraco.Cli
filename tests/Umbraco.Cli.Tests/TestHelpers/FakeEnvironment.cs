@@ -13,6 +13,8 @@ internal sealed class FakeEnvironment : IEnvironment
 
     public string CurrentDirectory { get; set; }
 
+    public string CacheDirectory { get; set; } = Path.Combine(Path.GetTempPath(), "umbraco-cli-tests-cache");
+
     public bool IsInputRedirected { get; set; } = true;
 
     public bool IsErrorRedirected { get; set; } = true;
