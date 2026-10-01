@@ -12,6 +12,11 @@ internal sealed record DeployCommandSettings
     public string? ApiKey { get; init; }
 
     /// <summary>
+    /// Gets the <c>umbraco-cloud.json</c> (or a folder containing it) to read the project ID from; defaults to the uploaded directory.
+    /// </summary>
+    public string? Config { get; init; }
+
+    /// <summary>
     /// Gets the Artifact to deploy; when not set, <see cref="Source" /> is uploaded first.
     /// </summary>
     public string? ArtifactId { get; init; }

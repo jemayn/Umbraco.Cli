@@ -93,7 +93,7 @@ System.Text.Json drops comments on write, so the editor never re-serialises a wh
 
 ## `umbraco cloud deployments`
 
-Shared options: `--project-id` (env `UMBRACO_CLOUD_PROJECT_ID`), `--api-key` (env `UMBRACO_CLOUD_API_KEY`), `-o`, `--no-progress`, `--verbose`. A missing value exits 2, naming both the flag and the environment variable. Credentials are never persisted. The API base URL can be overridden only via the undocumented environment variable `UMBRACO_CLOUD_API_URL` (for testing).
+Shared options: `--project-id` (env `UMBRACO_CLOUD_PROJECT_ID`), `--api-key` (env `UMBRACO_CLOUD_API_KEY`), `-o`, `--no-progress`, `--verbose`. A missing project ID falls back to `Deploy:Project:Id` in `umbraco-cloud.json`: `--config <file|dir>` (on `upload`, `deploy` and `show`), defaulting to the uploaded `--path` (a folder's `umbraco-cloud.json` at its root for published output, else in the project its `.umbraco` file points at); a zip given with `--file` isn't read. A missing value exits 2, naming both the flag and the environment variable. Credentials are never persisted. The API base URL can be overridden only via the undocumented environment variable `UMBRACO_CLOUD_API_URL` (for testing).
 
 ### `upload`
 

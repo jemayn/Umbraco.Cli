@@ -5,6 +5,7 @@ using Moq;
 using NUnit.Framework;
 using Umbraco.Cli.Cloud;
 using Umbraco.Cli.Cloud.Api;
+using Umbraco.Cli.Cloud.Init;
 using Umbraco.Cli.Infrastructure;
 using Umbraco.Cli.Infrastructure.Processes;
 using Umbraco.Cli.Tests.TestHelpers;
@@ -108,6 +109,89 @@ public class CloudCommandsTests
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
         Assert.That(result.Stderr, Does.Contain("--skip-preserve-umbraco-cloud-json"));
         Assert.That(_handler.Requests, Is.Empty);
+    }
+
+    [Test]
+    public async Task Upload_PublishedOutput_UsesTheProjectIdFromUmbracoCloudJson()
+    {
+        _environment.Variables.Remove(CloudCredentialsResolver.ProjectIdVariable);
+        string publish = Directory.CreateDirectory(Path.Combine(_directory, "publish")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(publish, "Umbraco.Core.dll"), "dll");
+        await File.WriteAllTextAsync(Path.Combine(publish, "umbraco-cloud.json"), """{ "Deploy": { "Project": { "Id": "project-from-file" } } }""");
+        _handler.Respond(HttpStatusCode.OK, """{ "artifactId": "a-1", "fileSize": 100 }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "upload", "--path", publish);
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(_handler.Requests.Single().Uri.AbsolutePath, Is.EqualTo("/v2/projects/project-from-file/deployments/artifacts"));
+    }
+
+    [Test]
+    public async Task Upload_SourceCode_UsesTheProjectIdFromTheProjectOfDotUmbracoUnlessGiven()
+    {
+        _environment.Variables.Remove(CloudCredentialsResolver.ProjectIdVariable);
+        string project = Directory.CreateDirectory(Path.Combine(_directory, "repo", "src", "Site")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(_directory, "repo", ".umbraco"), DotUmbracoFile.Create("src/Site", "Site.csproj"));
+        await File.WriteAllTextAsync(Path.Combine(project, "Site.csproj"), "<Project />");
+        await File.WriteAllTextAsync(Path.Combine(project, "umbraco-cloud.json"), """{ "Deploy": { "Project": { "Id": "project-from-source" } } }""");
+        _git.Setup(x => x.ListFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([".umbraco", "src/Site/Site.csproj", "src/Site/umbraco-cloud.json"]);
+        _handler
+            .Respond(HttpStatusCode.OK, """{ "artifactId": "a-1", "fileSize": 100 }""")
+            .Respond(HttpStatusCode.OK, """{ "artifactId": "a-2", "fileSize": 100 }""");
+
+        CliResult fromOption = await RunAsync("cloud", "deployments", "upload", "--path", Path.Combine(_directory, "repo"), "--project-id", "project-option");
+        CliResult fromFile = await RunAsync("cloud", "deployments", "upload", "--path", Path.Combine(_directory, "repo"));
+
+        Assert.That(fromOption.ExitCode, Is.EqualTo(ExitCodes.Success), fromOption.ToString());
+        Assert.That(fromFile.ExitCode, Is.EqualTo(ExitCodes.Success), fromFile.ToString());
+        Assert.That(_handler.Requests.Select(request => request.Uri.AbsolutePath), Is.EqualTo(new[]
+        {
+            "/v2/projects/project-option/deployments/artifacts",
+            "/v2/projects/project-from-source/deployments/artifacts",
+        }));
+    }
+
+    [Test]
+    public async Task Deploy_PathWithoutProjectId_ReturnsUsageExitCodeWithHint()
+    {
+        _environment.Variables.Remove(CloudCredentialsResolver.ProjectIdVariable);
+        string publish = Directory.CreateDirectory(Path.Combine(_directory, "publish")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(publish, "Umbraco.Core.dll"), "dll");
+
+        CliResult result = await RunAsync("cloud", "deployments", "deploy", "--path", publish, "--environment", "dev");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(result.Stderr, Does.Contain($"set Deploy:Project:Id in '{publish}'"));
+        Assert.That(_handler.Requests, Is.Empty);
+    }
+
+    [Test]
+    public async Task Deploy_ArtifactIdWithConfig_UsesTheProjectIdFromTheFile()
+    {
+        _environment.Variables.Remove(CloudCredentialsResolver.ProjectIdVariable);
+        string file = Path.Combine(_directory, "umbraco-cloud.json");
+        await File.WriteAllTextAsync(file, """{ "Deploy": { "Project": { "Id": "project-from-config" } } }""");
+        _handler.Respond(HttpStatusCode.Created, """{ "deploymentId": "d-1", "deploymentState": "Completed" }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "deploy", "--artifact-id", "a-1", "--environment", "live", "--config", file, "--no-wait");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(_handler.Requests.Single().Uri.AbsolutePath, Is.EqualTo("/v2/projects/project-from-config/deployments"));
+    }
+
+    [Test]
+    public async Task Show_ConfigFolder_UsesTheProjectIdFromItsUmbracoCloudJson()
+    {
+        _environment.Variables.Remove(CloudCredentialsResolver.ProjectIdVariable);
+        await File.WriteAllTextAsync(Path.Combine(_directory, "umbraco-cloud.json"), """{ "Deploy": { "Project": { "Id": "project-from-folder" } } }""");
+        _handler.Respond(HttpStatusCode.OK, """{ "deploymentId": "d-1", "deploymentState": "Completed" }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "show", "d-1", "--config", _directory);
+        CliResult missing = await RunAsync("cloud", "deployments", "show", "d-1", "--config", Path.Combine(_directory, "missing.json"));
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(_handler.Requests.Single().Uri.AbsolutePath, Is.EqualTo("/v2/projects/project-from-folder/deployments/d-1"));
+        Assert.That(missing.ExitCode, Is.EqualTo(ExitCodes.Usage), missing.ToString());
     }
 
     [Test]

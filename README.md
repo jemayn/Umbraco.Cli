@@ -52,6 +52,8 @@ These commands use the [Umbraco Cloud CI/CD API](https://docs.umbraco.com/umbrac
 | `--project-id` | `UMBRACO_CLOUD_PROJECT_ID` |
 | `--api-key` | `UMBRACO_CLOUD_API_KEY` |
 
+When neither gives the project ID, it's read from `Deploy:Project:Id` in `umbraco-cloud.json` (`umbraco deploy init --project-id` sets it): `--config` points at the file or a folder containing it, and defaults to the uploaded `--path` (at its root for published output, or in the Umbraco project that its `.umbraco` file points at for source code). For example, to deploy an uploaded artifact: `umbraco cloud deployments deploy --artifact-id <id> --environment live --config publish`.
+
 Deploy source code (a Git deployment) or published output (an Artifact deployment) in one step, waiting until the deployment completes or fails:
 
 ```sh

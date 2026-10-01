@@ -41,7 +41,7 @@ internal sealed class DeployCommandHandler
 
     public async Task<int> HandleAsync(DeployCommandSettings settings, CancellationToken cancellationToken)
     {
-        CloudCredentials credentials = CloudCredentialsResolver.Resolve(settings.ProjectId, settings.ApiKey, _environment);
+        CloudCredentials credentials = CloudCredentialsResolver.Resolve(settings.ProjectId, settings.ApiKey, _environment, settings.Config, settings.Source?.Directory);
 
         string? uploadedArtifactId = null;
         string artifactId;

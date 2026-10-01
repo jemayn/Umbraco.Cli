@@ -24,24 +24,26 @@ internal static class CloudCommands
 
     private static Command CreateUploadCommand(Func<IServiceProvider> services)
     {
-        Option<string> projectId = CreateProjectIdOption();
+        Option<string> projectId = CreateProjectIdOption(fromPath: true);
         Option<string> apiKey = CreateApiKeyOption();
+        Option<string> config = CreateConfigOption(fromPath: true);
         ArtifactOptions artifact = new();
 
-        var command = new Command("upload", "Upload a zip file or directory as an artifact.") { projectId, apiKey };
+        var command = new Command("upload", "Upload a zip file or directory as an artifact.") { projectId, apiKey, config };
         artifact.AddTo(command, required: true);
 
         command.SetAction((parseResult, cancellationToken) => services()
             .GetRequiredService<UploadCommandHandler>()
-            .HandleAsync(new UploadCommandSettings(parseResult.GetValue(projectId), parseResult.GetValue(apiKey), artifact.GetSource(parseResult)), cancellationToken));
+            .HandleAsync(new UploadCommandSettings(parseResult.GetValue(projectId), parseResult.GetValue(apiKey), artifact.GetSource(parseResult), parseResult.GetValue(config)), cancellationToken));
 
         return command;
     }
 
     private static Command CreateDeployCommand(Func<IServiceProvider> services)
     {
-        Option<string> projectId = CreateProjectIdOption();
+        Option<string> projectId = CreateProjectIdOption(fromPath: true);
         Option<string> apiKey = CreateApiKeyOption();
+        Option<string> config = CreateConfigOption(fromPath: true);
         var artifactId = new Option<string>("--artifact-id") { Description = "The ID of an uploaded artifact to deploy." };
         ArtifactOptions artifact = new();
         var environment = new Option<string>("--environment", "-e")
@@ -61,6 +63,7 @@ internal static class CloudCommands
         {
             projectId,
             apiKey,
+            config,
             artifactId,
             environment,
             message,
@@ -87,6 +90,7 @@ internal static class CloudCommands
             {
                 ProjectId = parseResult.GetValue(projectId),
                 ApiKey = parseResult.GetValue(apiKey),
+                Config = parseResult.GetValue(config),
                 ArtifactId = parseResult.GetValue(artifactId),
                 Source = parseResult.GetValue(artifactId) is null ? artifact.GetSource(parseResult) : null,
                 Environment = parseResult.GetRequiredValue(environment),
@@ -107,13 +111,14 @@ internal static class CloudCommands
 
     private static Command CreateShowCommand(Func<IServiceProvider> services)
     {
-        Option<string> projectId = CreateProjectIdOption();
+        Option<string> projectId = CreateProjectIdOption(fromPath: false);
         Option<string> apiKey = CreateApiKeyOption();
+        Option<string> config = CreateConfigOption(fromPath: false);
         var deploymentId = new Argument<string>("deployment-id") { Description = "The ID of the deployment." };
         var wait = new Option<bool>("--wait") { Description = "Wait until the deployment has completed or failed." };
         Option<TimeSpan> timeout = CreateTimeoutOption();
 
-        var command = new Command("show", "Show the status of a deployment.") { deploymentId, projectId, apiKey, wait, timeout };
+        var command = new Command("show", "Show the status of a deployment.") { deploymentId, projectId, apiKey, config, wait, timeout };
         command.SetAction((parseResult, cancellationToken) =>
         {
             var settings = new ShowCommandSettings(
@@ -121,7 +126,8 @@ internal static class CloudCommands
                 parseResult.GetValue(apiKey),
                 parseResult.GetRequiredValue(deploymentId),
                 parseResult.GetValue(wait),
-                parseResult.GetValue(timeout));
+                parseResult.GetValue(timeout),
+                parseResult.GetValue(config));
 
             return services().GetRequiredService<ShowCommandHandler>().HandleAsync(settings, cancellationToken);
         });
@@ -129,9 +135,18 @@ internal static class CloudCommands
         return command;
     }
 
-    private static Option<string> CreateProjectIdOption() => new("--project-id")
+    private static Option<string> CreateProjectIdOption(bool fromPath) => new("--project-id")
     {
-        Description = $"The Umbraco Cloud project ID [env: {CloudCredentialsResolver.ProjectIdVariable}].",
+        Description = fromPath
+            ? $"The Umbraco Cloud project ID [env: {CloudCredentialsResolver.ProjectIdVariable}] (default: Deploy:Project:Id in the umbraco-cloud.json of --config or --path)."
+            : $"The Umbraco Cloud project ID [env: {CloudCredentialsResolver.ProjectIdVariable}] (default: Deploy:Project:Id in the umbraco-cloud.json of --config).",
+    };
+
+    private static Option<string> CreateConfigOption(bool fromPath) => new("--config")
+    {
+        Description = fromPath
+            ? "The umbraco-cloud.json to read the project ID from, or a folder containing it (default: the one in --path)."
+            : "The umbraco-cloud.json to read the project ID from, or a folder containing it.",
     };
 
     private static Option<string> CreateApiKeyOption() => new("--api-key")
