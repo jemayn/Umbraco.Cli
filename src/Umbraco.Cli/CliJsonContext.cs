@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Umbraco.Cli.Cloud.Api;
 using Umbraco.Cli.Cloud.Init;
 using Umbraco.Cli.Deploy.Configuration;
+using Umbraco.Cli.Deploy.Schema;
 
 namespace Umbraco.Cli;
 
@@ -17,6 +18,7 @@ namespace Umbraco.Cli;
 [JsonSerializable(typeof(DeploymentResponse))]
 [JsonSerializable(typeof(InitResult))]
 [JsonSerializable(typeof(CloudInitResult))]
+[JsonSerializable(typeof(SchemaDeploymentResult))]
 internal sealed partial class CliJsonContext : JsonSerializerContext
 {
 }

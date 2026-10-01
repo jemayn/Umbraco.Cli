@@ -6,6 +6,7 @@ A cross-platform command-line tool for Umbraco products and services in developm
 umbraco cloud init
 umbraco cloud deployments upload|deploy|show
 umbraco deploy init
+umbraco deploy schema deploy|show
 ```
 
 ## Installation
@@ -93,6 +94,33 @@ umbraco deploy init \
 
 The package is detected with `dotnet package list`. A valid existing ApiSecret is kept (use `--rotate-secret` to replace it) and a newly generated one is printed: every environment must be configured with the same value. `--environment` replaces the configured list, keeping the IDs of environments with the same name. Comments and formatting of the settings file are preserved. Use `--dry-run` to see the changes without writing them.
 
+## Umbraco Deploy schema deployments
+
+`umbraco deploy schema deploy` makes an Environment update its schema from the deployed Umbraco Deploy schema files and waits until it completes or fails, as `TriggerDeploy.ps1` does in Umbraco Deploy's CI/CD pipelines. Run it after deploying the Umbraco project, with the Environment's name and the `appsettings.json` or `umbraco-cloud.json` to read the Environment's URL and the ApiSecret from, or the folder containing them (an Umbraco project or its published output):
+
+```sh
+umbraco deploy schema deploy --config publish --environment Live
+```
+
+Or give the URL and ApiSecret directly (or as `UMBRACO_DEPLOY_API_SECRET`):
+
+```sh
+umbraco deploy schema deploy --url https://www.example.com --api-secret "$DEPLOY_API_SECRET" --reason "Release 42"
+umbraco deploy schema show --url https://www.example.com --wait   # the current schema deployment
+```
+
+| Option | Environment variable | Meaning |
+|---|---|---|
+| `--environment`, `-e` | | The Environment's name in the Umbraco Deploy configuration (`Workspaces`) in `--config` |
+| `--url` | | The Environment's URL, instead of `--environment` |
+| `--config` | | The `appsettings.json` or `umbraco-cloud.json`, or the folder containing them (default: the current directory) |
+| `--api-secret` | `UMBRACO_DEPLOY_API_SECRET` | The ApiSecret (default: the one in `--config`) |
+| `--api-key` | `UMBRACO_DEPLOY_API_KEY` | The obsolete ApiKey, instead of an ApiSecret |
+
+- The requests are signed with the ApiSecret, so it must be the one the Environment uses, and the clocks of both machines must agree within 20 minutes.
+- Umbraco Deploy only keeps the status in memory: when it stays unknown for a minute (the site restarted, or another Umbraco Deploy operation was running), the schema deployment is started once more.
+- Other options: `--reason` (logged by Umbraco Deploy), `--no-wait`, `--timeout` (default 15m); `show [<task-id>]` with `--wait`.
+
 ## Output and exit codes
 
 Results are written to stdout (`-o text`, the default, or `-o json`); progress and diagnostics go to stderr. Live progress is shown in interactive terminals and replaced by plain lines when stderr is redirected, in CI, or with `--no-progress`. `--verbose` adds HTTP requests and error details.
@@ -102,10 +130,10 @@ Results are written to stdout (`-o text`, the default, or `-o json`); progress a
 | 0 | Success |
 | 1 | Error |
 | 2 | Invalid usage |
-| 3 | The deployment failed |
-| 4 | Timed out waiting (the deployment continues) |
-| 5 | Umbraco Cloud rejected the credentials |
-| 130 | Cancelled (a started deployment continues) |
+| 3 | The deployment or schema deployment failed |
+| 4 | Timed out waiting (the deployment or schema deployment continues) |
+| 5 | Umbraco Cloud or Umbraco Deploy rejected the credentials |
+| 130 | Cancelled (a started deployment or schema deployment continues) |
 
 ## Development
 

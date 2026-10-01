@@ -26,15 +26,18 @@
     <File Path="docs/adr/0003-never-embed-the-identity-secret.md" />
     <File Path="docs/adr/0004-calculate-release-types-and-lifecycle-phases.md" />
     <File Path="docs/adr/0005-query-nuget-with-httpclient-and-nuget-versioning.md" />
+    <File Path="docs/adr/0006-schema-deployments-use-the-hmac-schema-api.md" />
   </Folder>
   <Folder Name="/docs/superpowers/" />
   <Folder Name="/docs/superpowers/plans/">
     <File Path="docs/superpowers/plans/2026-09-30-umbraco-cli-0.1.0.md" />
     <File Path="docs/superpowers/plans/2026-09-30-umbraco-cloud-init.md" />
+    <File Path="docs/superpowers/plans/2026-10-01-umbraco-deploy-schema.md" />
   </Folder>
   <Folder Name="/docs/superpowers/specs/">
     <File Path="docs/superpowers/specs/2026-09-30-umbraco-cli-design.md" />
     <File Path="docs/superpowers/specs/2026-09-30-umbraco-cloud-init-design.md" />
+    <File Path="docs/superpowers/specs/2026-10-01-umbraco-deploy-schema-design.md" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Umbraco.Cli.Tests/Umbraco.Cli.Tests.csproj" />

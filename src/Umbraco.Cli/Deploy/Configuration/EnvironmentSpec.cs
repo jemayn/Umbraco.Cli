@@ -35,14 +35,9 @@ internal sealed record EnvironmentSpec(string Name, string Type, string Url, Gui
         string type = Required(parts, "Type", value).ToLowerInvariant();
         string url = Required(parts, "Url", value);
 
-        if (Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) is false || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        if (GetUrlError(url) is string urlError)
         {
-            throw Invalid(value, $"'{url}' is not an absolute URL");
-        }
-
-        if (uri.Scheme != Uri.UriSchemeHttps && uri.IsLoopback is false)
-        {
-            throw Invalid(value, $"'{url}' must use HTTPS (only localhost may use HTTP)");
+            throw Invalid(value, urlError);
         }
 
         Guid? id = null;
@@ -52,6 +47,24 @@ internal sealed record EnvironmentSpec(string Name, string Type, string Url, Gui
         }
 
         return new EnvironmentSpec(name, type, url.TrimEnd('/'), id);
+    }
+
+    /// <summary>
+    /// Gets why <paramref name="url" /> can't be the URL of an Environment (an absolute HTTPS URL, or HTTP for localhost), or <c>null</c> if it can.
+    /// </summary>
+    public static string? GetUrlError(string url)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) is false || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        {
+            return $"'{url}' is not an absolute URL";
+        }
+
+        if (uri.Scheme != Uri.UriSchemeHttps && uri.IsLoopback is false)
+        {
+            return $"'{url}' must use HTTPS (only localhost may use HTTP)";
+        }
+
+        return null;
     }
 
     private static string Required(Dictionary<string, string> parts, string key, string value)

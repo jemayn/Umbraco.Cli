@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.Parsing;
 using Microsoft.Extensions.DependencyInjection;
 using Umbraco.Cli.Cloud.Artifacts;
 using Umbraco.Cli.Infrastructure;
@@ -140,30 +139,8 @@ internal static class CloudCommands
         Description = $"The Umbraco Cloud CI/CD API key [env: {CloudCredentialsResolver.ApiKeyVariable}].",
     };
 
-    private static Option<TimeSpan> CreateTimeoutOption() => new("--timeout")
-    {
-        Description = "How long to wait for the deployment, for example 90s, 15m or 1h.",
-        DefaultValueFactory = _ => DeploymentWaiter.DefaultTimeout,
-        CustomParser = ParseTimeout,
-        HelpName = "duration",
-    };
-
-    private static TimeSpan ParseTimeout(ArgumentResult result)
-    {
-        if (result.Tokens.Count == 0)
-        {
-            return DeploymentWaiter.DefaultTimeout;
-        }
-
-        string value = result.Tokens[0].Value;
-        if (Durations.TryParse(value, out TimeSpan duration))
-        {
-            return duration;
-        }
-
-        result.AddError($"'{value}' is not a valid duration; use for example 90s, 15m, 1h30m or 00:15:00.");
-        return default;
-    }
+    private static Option<TimeSpan> CreateTimeoutOption()
+        => TimeoutOption.Create("How long to wait for the deployment, for example 90s, 15m or 1h.", DeploymentWaiter.DefaultTimeout);
 
     /// <summary>
     /// The options that describe what to upload.

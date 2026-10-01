@@ -7,6 +7,8 @@ using Umbraco.Cli.Cloud.Init;
 using Umbraco.Cli.Deploy;
 using Umbraco.Cli.Deploy.Configuration;
 using Umbraco.Cli.Deploy.ProjectDetection;
+using Umbraco.Cli.Deploy.Schema;
+using Umbraco.Cli.Deploy.Schema.Api;
 using Umbraco.Cli.Infrastructure.NuGet;
 using Umbraco.Cli.Infrastructure.Output;
 using Umbraco.Cli.Infrastructure.Processes;
@@ -74,5 +76,11 @@ internal static class ServiceRegistration
         services.AddSingleton<IDeployConfigurationWriter, CloudConfigurationWriter>();
         services.AddSingleton<DeployPackageDetector>();
         services.AddTransient<InitCommandHandler>();
+
+        // Umbraco Deploy schema deployments (the base URL differs per Environment, so requests use absolute URIs)
+        services.AddHttpClient<IDeployApiClient, DeployApiClient>(client => client.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddTransient<SchemaDeploymentWaiter>();
+        services.AddTransient<SchemaDeployCommandHandler>();
+        services.AddTransient<SchemaShowCommandHandler>();
     }
 }

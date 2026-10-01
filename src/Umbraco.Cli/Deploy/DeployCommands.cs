@@ -5,12 +5,12 @@ using Umbraco.Cli.Deploy.Configuration;
 namespace Umbraco.Cli.Deploy;
 
 /// <summary>
-/// Defines <c>umbraco deploy init</c>.
+/// Defines <c>umbraco deploy init</c> and <c>umbraco deploy schema deploy|show</c>.
 /// </summary>
 internal static class DeployCommands
 {
     public static Command Create(Func<IServiceProvider> services)
-        => new("deploy", "Configure Umbraco Deploy.") { CreateInitCommand(services) };
+        => new("deploy", "Configure Umbraco Deploy and run schema deployments.") { CreateInitCommand(services), Schema.SchemaCommands.Create(services) };
 
     private static Command CreateInitCommand(Func<IServiceProvider> services)
     {

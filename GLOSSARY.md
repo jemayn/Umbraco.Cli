@@ -69,6 +69,10 @@ _Avoid_: OnPrem (except in the package name `Umbraco.Deploy.OnPrem`), self-hoste
 The Umbraco Deploy package for Umbraco projects hosted on Umbraco Cloud, configured through `umbraco-cloud.json` and settings provided by Umbraco Cloud.
 _Avoid_: Cloud Deploy
 
+**Schema deployment**:
+An Environment updating its schema from the Umbraco Deploy schema files that were deployed to it, tracked until it completes or fails.
+_Avoid_: Deployment (an Umbraco Cloud Deployment), extraction (except in Umbraco Deploy's endpoint names), schema import
+
 **Current environment**:
 The Environment an Umbraco project considers itself to be; configured explicitly for Umbraco Deploy On-Premises, determined by Umbraco Cloud at runtime for Umbraco Deploy Cloud.
 _Avoid_: Current workspace, local environment
