@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Umbraco.Cli.Infrastructure.Json;
 
 namespace Umbraco.Cli.Deploy.Configuration;
@@ -75,11 +76,48 @@ internal sealed class CloudConfigurationWriter : IDeployConfigurationWriter
             outcome.Changes.Add("Generated a new ApiSecret.");
         }
 
+        ReportBaseline(document, outcome);
+
         if (outcome.Changes.Count > 0)
         {
             outcome.Notes.Add("umbraco-cloud.json only reaches Umbraco Cloud through a deployment with --skip-preserve-umbraco-cloud-json.");
         }
 
         return outcome;
+    }
+
+    private static void ReportBaseline(JsonDocumentEditor document, InitOutcome outcome)
+    {
+        string? baselineUrl = document.GetString([.. Settings, "BaselineUrl"]);
+        if (string.IsNullOrEmpty(baselineUrl))
+        {
+            baselineUrl = document.GetString([.. Project, "Upstream"]);
+        }
+
+        outcome.BaselineUrl = string.IsNullOrEmpty(baselineUrl) ? null : baselineUrl;
+        outcome.BaselineSecretConfigured = string.IsNullOrEmpty(document.GetString([.. Settings, "BaselineApiSecret"])) is false;
+        outcome.ChildSecretCount = document.GetNode([.. Settings, "ChildApiSecrets"]) is JsonObject childSecrets ? childSecrets.Count : 0;
+
+        if (outcome.BaselineUrl is null && outcome.BaselineSecretConfigured is false && outcome.ChildSecretCount == 0)
+        {
+            return;
+        }
+
+        if (outcome.BaselineUrl is not null)
+        {
+            outcome.Notes.Add($"The Baseline URL is {outcome.BaselineUrl}.");
+        }
+
+        if (outcome.BaselineSecretConfigured)
+        {
+            outcome.Notes.Add("A Baseline secret is configured.");
+        }
+
+        if (outcome.ChildSecretCount > 0)
+        {
+            outcome.Notes.Add($"{outcome.ChildSecretCount} child secret{(outcome.ChildSecretCount == 1 ? string.Empty : "s")} configured.");
+        }
+
+        outcome.Notes.Add("The ApiSecret is per project, and Umbraco Cloud provisions the Baseline settings, so they were not changed.");
     }
 }

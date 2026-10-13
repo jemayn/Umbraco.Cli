@@ -96,6 +96,38 @@ umbraco deploy init \
 
 The package is detected with `dotnet package list`. A valid existing ApiSecret is kept (use `--rotate-secret` to replace it) and a newly generated one is printed: every environment must be configured with the same value. `--environment` replaces the configured list, keeping the IDs of environments with the same name. Comments and formatting of the settings file are preserved. Use `--dry-run` to see the changes without writing them.
 
+### Baseline connections
+
+A Child project restores content from its Baseline project with a Baseline secret of its own, separate from the ApiSecret of either project. On Umbraco Deploy On-Premises, `deploy init` configures both sides of a Baseline connection; Umbraco Cloud provisions these settings itself, so for Umbraco Deploy Cloud the options are refused and `deploy init` only reports what is configured (`Deploy:Settings:BaselineUrl` or the obsolete `Deploy:Project:Upstream`, `BaselineApiSecret` and the number of `ChildApiSecrets`).
+
+On the Baseline project (its Live environment), generate a secret for a Child project and note the printed value:
+
+```sh
+umbraco deploy init --child-secret customer-a
+```
+
+On the Child project, set the Baseline project's URL and the secret:
+
+```sh
+UMBRACO_DEPLOY_BASELINE_SECRET="<the child secret>" umbraco deploy init --baseline-url https://baseline.example.com
+```
+
+| Option | Applies to | Meaning |
+|---|---|---|
+| `--baseline-url <url>` | Child project | Sets `BaselineUrl`, the absolute HTTPS URL of the Baseline project's Live environment (HTTP only for localhost, and without a user name or password) |
+| `--baseline-secret <base64>` (`UMBRACO_DEPLOY_BASELINE_SECRET`) | Child project | Sets `BaselineApiSecret` (Base64, at least 64 bytes). The environment variable is only used with `--baseline-url` or a configured `BaselineUrl` (On-Premises) |
+| `--rotate-baseline-secret` | Child project | Generates a new `BaselineApiSecret` and prints it, to be added to `ChildApiSecrets` on the Baseline project |
+| `--remove-baseline` | Child project | Removes `BaselineUrl` and `BaselineApiSecret` (cannot be combined with the other Child project options) |
+| `--child-secret <name>` | Baseline project | Generates `ChildApiSecrets:<name>` and prints it, to be set as `BaselineApiSecret` on the Child project. A valid existing entry is kept |
+| `--remove-child-secret <name>` | Baseline project | Removes that `ChildApiSecrets` entry |
+
+- A secret is never generated without `--rotate-baseline-secret` or `--child-secret`, and a newly generated one is printed once (masked in a dry run).
+- `--child-secret` stores the secret in the Baseline project's `appsettings.json`, so don't commit that file to a repository that Child projects are created from: set the secret as the environment variable `Umbraco__Deploy__Settings__ChildApiSecrets__<name>` on the Baseline project's Live environment instead (`deploy init` warns about this).
+- To rotate a child secret without downtime, add `<name>-1` with `--child-secret`, set it on the Child project, then remove `<name>` with `--remove-child-secret`.
+- A Baseline secret without a `BaselineUrl` only gets a warning: it is only used for calls to the Baseline project.
+- Baseline connections need Umbraco.Deploy.OnPrem 17.4.0 or later (17.x) or 18.2.0 or later (18.x); with an older version the settings are ignored, which `deploy init` warns about.
+- `deploy schema deploy` is unaffected: it is still signed with the project's ApiSecret.
+
 ## Umbraco Deploy schema deployments
 
 `umbraco deploy schema deploy` makes an Environment update its schema from the deployed Umbraco Deploy schema files and waits until it completes or fails, as `TriggerDeploy.ps1` does in Umbraco Deploy's CI/CD pipelines. Run it after deploying the Umbraco project, with the Environment's name and the `appsettings.json` or `umbraco-cloud.json` to read the Environment's URL and the ApiSecret from, or the folder containing them (an Umbraco project or its published output):

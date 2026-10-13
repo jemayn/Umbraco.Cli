@@ -13,6 +13,8 @@ namespace Umbraco.Cli.Deploy;
 /// </summary>
 internal sealed class InitCommandHandler
 {
+    public const string BaselineSecretVariable = "UMBRACO_DEPLOY_BASELINE_SECRET";
+
     private readonly IEnvironment _environment;
     private readonly DeployPackageDetector _detector;
     private readonly IEnumerable<IDeployConfigurationWriter> _writers;
@@ -50,11 +52,12 @@ internal sealed class InitCommandHandler
         IDeployConfigurationWriter writer = _writers.Single(candidate => candidate.Package == detected.Package);
         string filePath = Path.Combine(Path.GetDirectoryName(projectPath)!, writer.FileName);
         JsonDocumentEditor document = Load(filePath);
+        BaselineOptions? baseline = ValidateBaselineOptions(settings, detected.Package, document, out bool secretFromVariable);
 
         string? currentEnvironment = await ResolveCurrentEnvironmentAsync(settings, detected.Package, environments, document, interactive, cancellationToken);
 
         byte[] original = document.ToBytes();
-        InitOutcome outcome = writer.Apply(document, new InitRequest(environments, currentEnvironment, projectId, settings.RotateSecret));
+        InitOutcome outcome = writer.Apply(document, new InitRequest(environments, currentEnvironment, projectId, settings.RotateSecret, baseline));
         bool changed = File.Exists(filePath) is false || original.AsSpan().SequenceEqual(document.ToBytes()) is false;
         if (changed is false)
         {
@@ -64,6 +67,18 @@ internal sealed class InitCommandHandler
         else if (settings.DryRun is false)
         {
             AtomicFile.WriteAllBytes(filePath, document.ToBytes());
+        }
+
+        if (secretFromVariable is false && IsBaselineVariableApplicable(settings))
+        {
+            outcome.Notes.Add(detected.Package == DeployPackage.OnPremises
+                ? $"{BaselineSecretVariable} was ignored: it is only used with --baseline-url or a BaselineUrl configured in {writer.FileName}."
+                : $"{BaselineSecretVariable} was ignored: it is not used with Umbraco Deploy Cloud.");
+        }
+
+        if (baseline is not null && BaselineSupport.IsSupported(detected.Version) is false)
+        {
+            outcome.Warnings.Add($"{detected.PackageId} {detected.Version} doesn't support Baseline connections (they need {BaselineSupport.Describe()}), so the Baseline settings are ignored.");
         }
 
         foreach (string warning in outcome.Warnings)
@@ -81,6 +96,14 @@ internal sealed class InitCommandHandler
             Changes = outcome.Changes,
             ApiSecretGenerated = outcome.GeneratedApiSecret is not null,
             ApiSecret = settings.DryRun ? null : outcome.GeneratedApiSecret,
+            BaselineUrl = outcome.BaselineUrl,
+            BaselineSecretGenerated = outcome.GeneratedBaselineSecret is not null,
+            BaselineSecret = settings.DryRun ? null : outcome.GeneratedBaselineSecret,
+            ChildSecretGenerated = outcome.GeneratedChildSecret is not null,
+            ChildSecretName = outcome.GeneratedChildSecretName,
+            ChildSecret = settings.DryRun ? null : outcome.GeneratedChildSecret,
+            BaselineSecretConfigured = outcome.BaselineSecretConfigured,
+            ChildSecretCount = outcome.ChildSecretCount,
         };
 
         _output.Write(result, CliJsonContext.Default.InitResult, _ => FormatText(result, outcome));
@@ -143,7 +166,21 @@ internal sealed class InitCommandHandler
         {
             text.AppendLine();
             text.AppendLine("New ApiSecret (every environment must be configured with this same value):");
-            text.Append(result.DryRun ? ApiSecret.Masked : outcome.GeneratedApiSecret);
+            text.AppendLine(result.DryRun ? ApiSecret.Masked : outcome.GeneratedApiSecret);
+        }
+
+        if (outcome.GeneratedBaselineSecret is not null)
+        {
+            text.AppendLine();
+            text.AppendLine($"New Baseline secret (add it to ChildApiSecrets on the Baseline project's Live environment under a name of your choice, preferably as the environment variable {OnPremisesConfigurationWriter.ChildSecretVariable("<name>")}):");
+            text.AppendLine(result.DryRun ? ApiSecret.Masked : outcome.GeneratedBaselineSecret);
+        }
+
+        if (outcome.GeneratedChildSecret is not null)
+        {
+            text.AppendLine();
+            text.AppendLine($"New child secret '{outcome.GeneratedChildSecretName}' (set it as BaselineApiSecret on the Child project):");
+            text.AppendLine(result.DryRun ? ApiSecret.Masked : outcome.GeneratedChildSecret);
         }
 
         return text.ToString().TrimEnd();
@@ -173,6 +210,91 @@ internal sealed class InitCommandHandler
         }
 
         return Guid.TryParse(projectId, out Guid parsed) ? parsed : throw new UsageException($"The project ID '{projectId}' is not a GUID.");
+    }
+
+    private bool IsBaselineVariableApplicable(InitCommandSettings settings)
+        => string.IsNullOrWhiteSpace(_environment.GetVariable(BaselineSecretVariable)) is false
+            && settings.BaselineSecret is null
+            && settings.RotateBaselineSecret is false
+            && settings.RemoveBaseline is false;
+
+    private BaselineOptions? ValidateBaselineOptions(InitCommandSettings settings, DeployPackage package, JsonDocumentEditor document, out bool secretFromVariable)
+    {
+        secretFromVariable = false;
+        var requested = new BaselineOptions(settings.BaselineUrl, settings.BaselineSecret, settings.RotateBaselineSecret, settings.RemoveBaseline, settings.ChildSecret, settings.RemoveChildSecret);
+
+        string? variableSecret = null;
+        if (package == DeployPackage.OnPremises && IsBaselineVariableApplicable(settings))
+        {
+            bool hasBaselineUrl = settings.BaselineUrl is not null || OnPremisesConfigurationWriter.HasBaselineUrl(document);
+            variableSecret = hasBaselineUrl ? _environment.GetVariable(BaselineSecretVariable) : null;
+        }
+
+        if (requested.IsEmpty && variableSecret is null)
+        {
+            return null;
+        }
+
+        if (package != DeployPackage.OnPremises)
+        {
+            throw new UsageException(
+                "The Baseline options only apply to Umbraco Deploy On-Premises; Umbraco Cloud provisions the Baseline settings itself.",
+                "Remove --baseline-url, --baseline-secret, --rotate-baseline-secret, --remove-baseline, --child-secret and --remove-child-secret.");
+        }
+
+        if (settings.RotateBaselineSecret && settings.BaselineSecret is not null)
+        {
+            throw new UsageException("--rotate-baseline-secret and --baseline-secret cannot be combined.");
+        }
+
+        if (settings.RemoveBaseline && (settings.BaselineUrl is not null || settings.BaselineSecret is not null || settings.RotateBaselineSecret))
+        {
+            throw new UsageException("--remove-baseline cannot be combined with --baseline-url, --baseline-secret or --rotate-baseline-secret.");
+        }
+
+        string? url = null;
+        if (settings.BaselineUrl is not null)
+        {
+            url = EnvironmentSpec.GetUrlError(settings.BaselineUrl) is string urlError
+                ? throw new UsageException($"Invalid --baseline-url: {urlError}.", "Use the absolute HTTPS URL of the Baseline project's Live environment.")
+                : settings.BaselineUrl.TrimEnd('/');
+
+            // Umbraco Deploy ignores a Baseline URL with credentials, which would also end up in appsettings.json
+            if (Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) && string.IsNullOrEmpty(uri.UserInfo) is false)
+            {
+                throw new UsageException("Invalid --baseline-url: it must not contain a user name or password.", "Use the absolute HTTPS URL of the Baseline project's Live environment, without credentials.");
+            }
+        }
+
+        string? secret = settings.BaselineSecret ?? variableSecret;
+        secretFromVariable = variableSecret is not null;
+        if (secret is not null && ApiSecret.IsValid(secret) is false)
+        {
+            throw new UsageException(
+                $"{(secretFromVariable ? BaselineSecretVariable : "--baseline-secret")} must be Base64 for at least 64 bytes.", "Generate one with --rotate-baseline-secret, or --child-secret on the Baseline project.");
+        }
+
+        string? childSecret = ValidateChildSecretName(settings.ChildSecret, "--child-secret");
+        string? removeChildSecret = ValidateChildSecretName(settings.RemoveChildSecret, "--remove-child-secret");
+        if (childSecret is not null && string.Equals(childSecret, removeChildSecret, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UsageException("--child-secret and --remove-child-secret cannot name the same child secret.");
+        }
+
+        return new BaselineOptions(url, secret, settings.RotateBaselineSecret, settings.RemoveBaseline, childSecret, removeChildSecret);
+    }
+
+    private static string? ValidateChildSecretName(string? name, string option)
+    {
+        if (name is null)
+        {
+            return null;
+        }
+
+        string trimmed = name.Trim();
+        return trimmed.Length == 0 || trimmed.Contains(':', StringComparison.Ordinal)
+            ? throw new UsageException($"Invalid {option} '{name}': the name must not be empty or contain ':'.")
+            : trimmed;
     }
 
     private async Task<string?> ResolveCurrentEnvironmentAsync(

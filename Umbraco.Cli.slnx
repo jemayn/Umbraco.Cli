@@ -27,12 +27,14 @@
     <File Path="docs/adr/0004-calculate-release-types-and-lifecycle-phases.md" />
     <File Path="docs/adr/0005-query-nuget-with-httpclient-and-nuget-versioning.md" />
     <File Path="docs/adr/0006-schema-deployments-use-the-hmac-schema-api.md" />
+    <File Path="docs/adr/0007-apisecret-per-project-and-baseline-secret-per-connection.md" />
   </Folder>
   <Folder Name="/docs/superpowers/" />
   <Folder Name="/docs/superpowers/plans/">
     <File Path="docs/superpowers/plans/2026-09-30-umbraco-cli-0.1.0.md" />
     <File Path="docs/superpowers/plans/2026-09-30-umbraco-cloud-init.md" />
     <File Path="docs/superpowers/plans/2026-10-01-umbraco-deploy-schema.md" />
+    <File Path="docs/superpowers/plans/2026-10-02-baseline-secret.md" />
   </Folder>
   <Folder Name="/docs/superpowers/specs/">
     <File Path="docs/superpowers/specs/2026-09-30-umbraco-cli-design.md" />

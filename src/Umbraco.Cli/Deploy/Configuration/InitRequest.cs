@@ -7,4 +7,5 @@ namespace Umbraco.Cli.Deploy.Configuration;
 /// <param name="CurrentEnvironment">The name of the current environment (Umbraco Deploy On-Premises only).</param>
 /// <param name="ProjectId">The Umbraco Cloud project ID (Umbraco Deploy Cloud only).</param>
 /// <param name="RotateSecret">Whether to replace a valid ApiSecret (or, on-premises, an ApiKey).</param>
-internal sealed record InitRequest(IReadOnlyList<EnvironmentSpec>? Environments, string? CurrentEnvironment, Guid? ProjectId, bool RotateSecret);
+/// <param name="Baseline">The Baseline connection changes (Umbraco Deploy On-Premises only), or <c>null</c> for none.</param>
+internal sealed record InitRequest(IReadOnlyList<EnvironmentSpec>? Environments, string? CurrentEnvironment, Guid? ProjectId, bool RotateSecret, BaselineOptions? Baseline = null);

@@ -78,12 +78,28 @@ The Environment an Umbraco project considers itself to be; configured explicitly
 _Avoid_: Current workspace, local environment
 
 **ApiSecret**:
-A cryptographically random value of at least 64 bytes, shared by all Environments of an Umbraco project, that Umbraco Deploy uses to authenticate requests between them.
+A cryptographically random value of at least 64 bytes, shared by all Environments of one Umbraco project (and not with other projects), that Umbraco Deploy uses to authenticate requests between them.
 _Avoid_: Secret key, token
 
 **ApiKey**:
 The obsolete, shorter shared value that preceded the ApiSecret; still required by Umbraco Cloud git-based projects.
 _Avoid_: API key (when meaning the Cloud CI/CD API key)
+
+**Baseline project**:
+An Umbraco project that other projects are created from and can restore content from.
+_Avoid_: Parent project, upstream project
+
+**Child project**:
+An Umbraco project created from a Baseline project.
+_Avoid_: Baseline child, downstream project, fork
+
+**Baseline connection**:
+The relationship between one Child project and its Baseline project.
+_Avoid_: Baseline family, baseline reference, baseline link
+
+**Baseline secret**:
+The secret of one Baseline connection, held by the Child project and by the Baseline project's Live environment, that authenticates only restores from the Baseline project.
+_Avoid_: Baseline key, shared key, restore key
 
 **CI/CD API key**:
 The Umbraco Cloud credential, scoped to one Cloud project, used to upload Artifacts and start Deployments.

@@ -141,4 +141,45 @@ public class CloudConfigurationWriterTests
             """,
             StringComparison.Ordinal)));
     }
+
+    [Test]
+    public void Apply_BaselineSettings_AreReportedAndNeverWritten()
+    {
+        var document = JsonDocumentEditor.Parse($$"""{ "Deploy": { "Settings": { "ApiSecret": "{{ValidSecret}}", "BaselineUrl": "https://baseline.example.com", "BaselineApiSecret": "{{ValidSecret}}", "ChildApiSecrets": { "a": "{{ValidSecret}}", "b": "{{ValidSecret}}" } } } }""");
+        string original = document.ToString();
+
+        InitOutcome outcome = _writer.Apply(document, new InitRequest(null, null, null, RotateSecret: false));
+
+        Assert.That(document.ToString(), Is.EqualTo(original));
+        Assert.That(outcome.BaselineUrl, Is.EqualTo("https://baseline.example.com"));
+        Assert.That(outcome.BaselineSecretConfigured, Is.True);
+        Assert.That(outcome.ChildSecretCount, Is.EqualTo(2));
+        Assert.That(outcome.Notes, Has.Some.Contains("https://baseline.example.com"));
+        Assert.That(outcome.Notes, Has.Some.Contains("2 child secrets"));
+        Assert.That(outcome.Notes, Has.Some.Contains("per project"));
+        Assert.That(outcome.Notes, Has.Some.Contains("provisions"));
+    }
+
+    [Test]
+    public void Apply_ObsoleteUpstream_IsReportedAsBaselineUrl()
+    {
+        var document = JsonDocumentEditor.Parse($$"""{ "Deploy": { "Settings": { "ApiSecret": "{{ValidSecret}}" }, "Project": { "Upstream": "https://upstream.example.com" } } }""");
+
+        InitOutcome outcome = _writer.Apply(document, new InitRequest(null, null, null, RotateSecret: false));
+
+        Assert.That(outcome.BaselineUrl, Is.EqualTo("https://upstream.example.com"));
+        Assert.That(outcome.BaselineSecretConfigured, Is.False);
+        Assert.That(outcome.ChildSecretCount, Is.Zero);
+    }
+
+    [Test]
+    public void Apply_NoBaselineSettings_ReportsNothing()
+    {
+        var document = JsonDocumentEditor.Parse($$"""{ "Deploy": { "Settings": { "ApiSecret": "{{ValidSecret}}" } } }""");
+
+        InitOutcome outcome = _writer.Apply(document, new InitRequest(null, null, null, RotateSecret: false));
+
+        Assert.That(outcome.BaselineUrl, Is.Null);
+        Assert.That(outcome.Notes, Has.None.Contains("Baseline"));
+    }
 }
