@@ -178,4 +178,4 @@ dotnet test --filter "TestCategory=Integration"                        # runs re
 dotnet run --project src/Umbraco.Cli -- --help
 ```
 
-Commands for a product or service go in a top-level command group named after it (such as `cloud` or `deploy`), with the same name as a tag in `PackageTags` (`Directory.Build.props`); a test checks this. The Umbraco Cloud smoke tests (`TestCategory=Smoke`) only run when `UMBRACO_CLOUD_PROJECT_ID` and `UMBRACO_CLOUD_API_KEY` are set. See [GLOSSARY.md](GLOSSARY.md) for the domain language, [docs/adr](docs/adr) for architecture decisions and [docs/superpowers/specs](docs/superpowers/specs) for the design.
+Commands for a product or service go in a top-level command group named after it (such as `cloud` or `deploy`), with the same name as a tag in `PackageTags` (`Directory.Build.props`); a test checks this. The Umbraco Cloud smoke tests (`TestCategory=Smoke`) only run when `UMBRACO_CLOUD_PROJECT_ID` and `UMBRACO_CLOUD_API_KEY` are set. See [GLOSSARY.md](GLOSSARY.md) for the domain language and [docs/adr](docs/adr) for architecture decisions.
