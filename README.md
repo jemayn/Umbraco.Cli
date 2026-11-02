@@ -171,6 +171,8 @@ Results are written to stdout (`-o text`, the default, or `-o json`); progress a
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report issues and contribute.
+
 ```sh
 dotnet build
 dotnet test --filter "TestCategory!=Integration&TestCategory!=Smoke"   # unit tests

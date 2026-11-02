@@ -1,0 +1,67 @@
+---
+name: 🐛 Bug report
+description: "Report a bug in the Umbraco CLI."
+labels: ["type/bug", "state/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please **remove any secrets** (API keys, ApiSecrets, client secrets, connection strings) from commands, output and files you paste here.
+
+        Found a security issue? Don't report it here: report it to security@umbraco.com, see [how to report a vulnerability](https://umbraco.com/about-us/trust-center/security-and-umbraco/how-to-report-a-vulnerability-in-umbraco/).
+  - type: input
+    id: version
+    attributes:
+      label: "Which Umbraco CLI version are you using?"
+      description: "Run `umbraco --version` and paste the *exact* version."
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: command
+    attributes:
+      label: "Which command is this about?"
+      options:
+        - umbraco cloud init
+        - umbraco cloud deployments
+        - umbraco deploy init
+        - umbraco deploy schema
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: "Where are you running it?"
+      description: "Operating system, .NET SDK version (`dotnet --version`), and the CI/CD system if it runs in a pipeline."
+      placeholder: "Windows 11, .NET SDK 10.0.100, Azure Pipelines"
+    validations:
+      required: true
+  - type: input
+    id: umbraco-version
+    attributes:
+      label: "Which Umbraco versions does the project use, if any?"
+      description: "The exact Umbraco CMS version, and Umbraco Deploy or other product versions when relevant."
+      placeholder: "Umbraco.Cms 17.3.0, Umbraco.Deploy.Cloud 17.4.1"
+  - type: textarea
+    id: summary
+    attributes:
+      label: "Bug summary"
+      description: "Write a short summary of the bug."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: "Steps to reproduce"
+      description: "The exact command(s) you ran, with secrets removed. Running with `--verbose` gives more detail."
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: "Expected result / actual result"
+      description: "What did you expect, and what actually happened? Include the output and the exit code (with secrets removed)."
+    validations:
+      required: true
