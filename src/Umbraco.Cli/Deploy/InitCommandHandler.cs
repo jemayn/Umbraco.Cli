@@ -95,13 +95,10 @@ internal sealed class InitCommandHandler
             Environments = outcome.Environments,
             Changes = outcome.Changes,
             ApiSecretGenerated = outcome.GeneratedApiSecret is not null,
-            ApiSecret = settings.DryRun ? null : outcome.GeneratedApiSecret,
             BaselineUrl = outcome.BaselineUrl,
             BaselineSecretGenerated = outcome.GeneratedBaselineSecret is not null,
-            BaselineSecret = settings.DryRun ? null : outcome.GeneratedBaselineSecret,
             ChildSecretGenerated = outcome.GeneratedChildSecret is not null,
             ChildSecretName = outcome.GeneratedChildSecretName,
-            ChildSecret = settings.DryRun ? null : outcome.GeneratedChildSecret,
             BaselineSecretConfigured = outcome.BaselineSecretConfigured,
             ChildSecretCount = outcome.ChildSecretCount,
         };
@@ -162,25 +159,29 @@ internal sealed class InitCommandHandler
             text.AppendLine($"  Environment {environment.Name} ({environment.Type}): {environment.Url}");
         }
 
+        // Generated secrets are only written to the file, never to the output, so they can't end up in logs (such as CI/CD build logs)
+        string written = result.DryRun ? "would be written" : "was written";
         if (outcome.GeneratedApiSecret is not null)
         {
             text.AppendLine();
-            text.AppendLine("New ApiSecret (every environment must be configured with this same value):");
-            text.AppendLine(result.DryRun ? ApiSecret.Masked : outcome.GeneratedApiSecret);
+            text.AppendLine($"The new ApiSecret {written} to Umbraco:Deploy:Settings:ApiSecret in {result.File}; every environment must be configured with this same value.");
         }
 
         if (outcome.GeneratedBaselineSecret is not null)
         {
             text.AppendLine();
-            text.AppendLine($"New Baseline secret (add it to ChildApiSecrets on the Baseline project's Live environment under a name of your choice, preferably as the environment variable {OnPremisesConfigurationWriter.ChildSecretVariable("<name>")}):");
-            text.AppendLine(result.DryRun ? ApiSecret.Masked : outcome.GeneratedBaselineSecret);
+            text.AppendLine($"The new Baseline secret {written} to Umbraco:Deploy:Settings:BaselineApiSecret in {result.File}; add the same value to ChildApiSecrets on the Baseline project's Live environment under a name of your choice, preferably as the environment variable {OnPremisesConfigurationWriter.ChildSecretVariable("<name>")}.");
         }
 
         if (outcome.GeneratedChildSecret is not null)
         {
             text.AppendLine();
-            text.AppendLine($"New child secret '{outcome.GeneratedChildSecretName}' (set it as BaselineApiSecret on the Child project):");
-            text.AppendLine(result.DryRun ? ApiSecret.Masked : outcome.GeneratedChildSecret);
+            text.AppendLine($"The new child secret '{outcome.GeneratedChildSecretName}' {written} to Umbraco:Deploy:Settings:ChildApiSecrets in {result.File}; set the same value as BaselineApiSecret on the Child project.");
+        }
+
+        if (outcome.GeneratedApiSecret is not null || outcome.GeneratedBaselineSecret is not null || outcome.GeneratedChildSecret is not null)
+        {
+            text.AppendLine("Secrets are never shown in the output, so they can't end up in logs.");
         }
 
         return text.ToString().TrimEnd();
@@ -201,6 +202,11 @@ internal sealed class InitCommandHandler
         if (settings.CurrentEnvironment is not null)
         {
             throw new UsageException("--current-environment only applies to Umbraco Deploy On-Premises; Umbraco Cloud determines the current environment itself.");
+        }
+
+        if (settings.RotateSecret)
+        {
+            throw new UsageException("--rotate-secret only applies to Umbraco Deploy On-Premises; Umbraco Cloud provisions the ApiSecret itself.");
         }
 
         string? projectId = settings.ProjectId ?? _environment.GetVariable(Cloud.CloudCredentialsResolver.ProjectIdVariable);

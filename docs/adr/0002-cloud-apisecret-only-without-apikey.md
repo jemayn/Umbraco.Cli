@@ -1,5 +1,7 @@
 # Only write an ApiSecret to umbraco-cloud.json when no ApiKey is set
 
+**Superseded by [ADR 0008](0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md):** the CLI no longer generates or writes an ApiSecret for Umbraco Deploy Cloud.
+
 For Umbraco Deploy Cloud, `umbraco deploy init` writes a generated ApiSecret to `Deploy.Settings.ApiSecret` in `umbraco-cloud.json` only when `Deploy.Settings.ApiKey` is not set, and never removes or changes an existing ApiKey. Umbraco Cloud git-based projects still read the ApiKey from the Cloud repository's copy of `umbraco-cloud.json`, and that copy replaces the deployed file unless `skipPreserveUmbracoCloudJson` is set, so replacing the ApiKey locally would either be discarded or break the Environments that still use it.
 
 ## Consequences

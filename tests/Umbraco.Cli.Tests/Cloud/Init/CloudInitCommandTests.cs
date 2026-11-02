@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using NUnit.Framework;
+using Umbraco.Cli.Cloud.Init;
 using Umbraco.Cli.Infrastructure;
 using Umbraco.Cli.Infrastructure.NuGet;
 using Umbraco.Cli.Infrastructure.Output;
@@ -366,13 +367,25 @@ public class CloudInitCommandTests
     }
 
     [Test]
-    public async Task IdentityValues_AreWrittenButNeverPrinted()
+    public async Task Help_HasNoIdentityOptions()
     {
-        CliResult result = await RunAsync("cloud", "init", "--name", "MySite", "--no-build", "--identity-client-id", "my-id", "--identity-client-secret", "my-secret", "--verbose");
+        CliResult result = await RunAsync("cloud", "init", "--help");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
-        Assert.That(File.ReadAllText(Path.Combine(_directory, "src", "MySite", "umbraco-cloud.json")), Does.Contain("my-secret"));
-        Assert.That(result.Stdout + result.Stderr, Does.Not.Contain("my-secret"));
+        Assert.That(result.Stdout, Does.Not.Contain("--identity-client"));
+    }
+
+    [Test]
+    public async Task IdentityVariables_AreNotWrittenToUmbracoCloudJson()
+    {
+        _environment.Variables["UMBRACO_CLOUD_IDENTITY_CLIENT_ID"] = "my-id";
+        _environment.Variables["UMBRACO_CLOUD_IDENTITY_CLIENT_SECRET"] = "my-secret";
+
+        CliResult result = await RunAsync("cloud", "init", "--name", "MySite", "--no-build");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        string umbracoCloudJson = File.ReadAllText(Path.Combine(_directory, "src", "MySite", "umbraco-cloud.json"));
+        Assert.That(umbracoCloudJson, Does.Not.Contain("my-secret").And.Contain(IdentityValues.PlaceholderClientSecret));
     }
 
     private string CreateExistingProject(params (string Id, string Version)[] packages)

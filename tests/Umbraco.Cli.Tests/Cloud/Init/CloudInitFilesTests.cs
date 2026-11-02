@@ -91,7 +91,7 @@ public class CloudInitFilesTests
     {
         var files = new List<string>();
 
-        string state = CloudProjectSettings.EnsureUmbracoCloudJson(_directory, given: null, files);
+        string state = CloudProjectSettings.EnsureUmbracoCloudJson(_directory, files);
 
         Assert.That(state, Is.EqualTo("placeholder"));
         JsonNode json = JsonNode.Parse(File.ReadAllText(Path.Combine(_directory, "umbraco-cloud.json")))!;
@@ -101,18 +101,16 @@ public class CloudInitFilesTests
     }
 
     [Test]
-    public void EnsureUmbracoCloudJson_ExistingFile_IsUnchangedUnlessValuesAreGiven()
+    public void EnsureUmbracoCloudJson_ExistingFile_IsUnchanged()
     {
         string path = Path.Combine(_directory, "umbraco-cloud.json");
         const string original = "{\n  // From Umbraco Cloud\n  \"Deploy\": { \"Settings\": { \"ApiKey\": \"k\" } }\n}";
         File.WriteAllText(path, original);
+        var files = new List<string>();
 
-        Assert.That(CloudProjectSettings.EnsureUmbracoCloudJson(_directory, given: null, []), Is.EqualTo("unchanged"));
+        Assert.That(CloudProjectSettings.EnsureUmbracoCloudJson(_directory, files), Is.EqualTo("unchanged"));
         Assert.That(File.ReadAllText(path), Is.EqualTo(original));
-
-        Assert.That(CloudProjectSettings.EnsureUmbracoCloudJson(_directory, new IdentityValues("id", "secret", IsPlaceholder: false), []), Is.EqualTo("provided"));
-        string updated = File.ReadAllText(path);
-        Assert.That(updated, Does.Contain("// From Umbraco Cloud").And.Contain("\"ApiKey\": \"k\"").And.Contain("\"ClientSecret\": \"secret\""));
+        Assert.That(files, Is.Empty);
     }
 
     [Test]
@@ -129,20 +127,6 @@ public class CloudInitFilesTests
         Assert.That(products["Umbraco.Deploy"]!.GetValue<string>(), Is.EqualTo("UMBRACO-CLOUD"));
         Assert.That(products["Umbraco.Forms"]!.GetValue<string>(), Is.EqualTo("MY-KEY"));
         Assert.That(files, Has.Count.EqualTo(1));
-    }
-
-    [Test]
-    public void IdentityValues_Resolve_PrefersOptionsOverEnvironmentVariables()
-    {
-        var environment = new FakeEnvironment();
-        environment.Variables[IdentityValues.ClientIdVariable] = "env-id";
-        environment.Variables[IdentityValues.ClientSecretVariable] = "env-secret";
-
-        Assert.That(IdentityValues.Resolve(null, null, new FakeEnvironment()), Is.Null);
-        Assert.That(IdentityValues.Resolve(null, null, environment), Is.EqualTo(new IdentityValues("env-id", "env-secret", false)));
-        Assert.That(IdentityValues.Resolve("id", "secret", environment), Is.EqualTo(new IdentityValues("id", "secret", false)));
-        Assert.Throws<UsageException>(() => IdentityValues.Resolve("id", null, new FakeEnvironment()));
-        Assert.That(new IdentityValues("id", "secret", false).ToString(), Does.Not.Contain("secret"));
     }
 
     [Test]

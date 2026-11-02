@@ -37,7 +37,7 @@ public class InitCommandTests
     public void TearDown() => Directory.Delete(_directory, recursive: true);
 
     [Test]
-    public async Task OnPremises_WritesAppSettingsAndPrintsTheSecret()
+    public async Task OnPremises_WritesAppSettingsWithoutPrintingTheSecret()
     {
         UsePackage("Umbraco.Deploy.OnPrem");
         File.WriteAllText(AppSettingsPath, "{\n  // Keep me\n  \"Umbraco\": {}\n}");
@@ -51,7 +51,8 @@ public class InitCommandTests
         Assert.That(deploy["Settings"]!["ApiSecret"]!.GetValue<string>(), Is.EqualTo(GeneratedSecret));
         Assert.That(deploy["Project"]!["CurrentWorkspaceName"]!.GetValue<string>(), Is.EqualTo("Live"));
         Assert.That(deploy["Project"]!["Workspaces"]![0]!["Id"]!.GetValue<string>(), Is.EqualTo(NewId.ToString()));
-        Assert.That(result.Stdout, Does.Contain("New ApiSecret").And.Contain(GeneratedSecret));
+        Assert.That(result.Stdout, Does.Contain("The new ApiSecret was written to Umbraco:Deploy:Settings:ApiSecret"));
+        Assert.That(result.Stdout + result.Stderr, Does.Not.Contain(GeneratedSecret));
         Assert.That(result.Stderr, Does.Contain("Detected Umbraco.Deploy.OnPrem 17.1.0 in Site.csproj."));
     }
 
@@ -89,7 +90,7 @@ public class InitCommandTests
     }
 
     [Test]
-    public async Task OnPremises_DryRun_WritesNothingAndMasksTheSecret()
+    public async Task OnPremises_DryRun_WritesNothingAndNeverPrintsTheSecret()
     {
         UsePackage("Umbraco.Deploy.OnPrem");
 
@@ -144,8 +145,33 @@ public class InitCommandTests
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
         JsonNode written = JsonNode.Parse(File.ReadAllText(Path.Combine(_directory, "umbraco-cloud.json")))!;
         Assert.That(written["Deploy"]!["Project"]!["Id"]!.GetValue<string>(), Is.EqualTo(projectId.ToString()));
-        Assert.That(written["Deploy"]!["Settings"]!["ApiSecret"]!.GetValue<string>(), Is.EqualTo(GeneratedSecret));
+        Assert.That(written["Deploy"]!["Settings"], Is.Null);
         Assert.That(result.Stdout, Does.Contain("--skip-preserve-umbraco-cloud-json"));
+    }
+
+    [Test]
+    public async Task Cloud_NeverGeneratesASecret()
+    {
+        UsePackage("Umbraco.Deploy.Cloud");
+
+        CliResult result = await RunAsync("deploy", "init", "-e", "Name=Local;Type=development;Url=https://localhost:44307");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        string written = File.ReadAllText(Path.Combine(_directory, "umbraco-cloud.json"));
+        Assert.That(written, Does.Not.Contain("ApiSecret").And.Not.Contain(GeneratedSecret));
+        Assert.That(result.Stdout, Does.Contain("Umbraco Cloud provisions it"));
+    }
+
+    [Test]
+    public async Task Cloud_RotateSecret_ReturnsUsageExitCode()
+    {
+        UsePackage("Umbraco.Deploy.Cloud");
+
+        CliResult result = await RunAsync("deploy", "init", "--rotate-secret");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("Umbraco Cloud provisions the ApiSecret"));
+        Assert.That(File.Exists(Path.Combine(_directory, "umbraco-cloud.json")), Is.False);
     }
 
     [Test]
@@ -230,7 +256,7 @@ public class InitCommandTests
     }
 
     [Test]
-    public async Task OnPremises_RotateBaselineSecret_PrintsItOnceWithGuidance()
+    public async Task OnPremises_RotateBaselineSecret_JsonOutputNeverContainsTheSecret()
     {
         UsePackage("Umbraco.Deploy.OnPrem", "17.4.0");
 
@@ -239,20 +265,20 @@ public class InitCommandTests
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
         JsonNode json = JsonNode.Parse(result.Stdout)!;
         Assert.That(json["baselineSecretGenerated"]!.GetValue<bool>(), Is.True);
-        Assert.That(json["baselineSecret"]!.GetValue<string>(), Is.EqualTo(GeneratedSecret));
-
-        Assert.That(result.Stdout, Does.Not.Contain("New Baseline secret"));
+        Assert.That(json["baselineSecret"], Is.Null);
+        Assert.That(result.Stdout + result.Stderr, Does.Not.Contain(GeneratedSecret));
     }
 
     [Test]
-    public async Task OnPremises_RotateBaselineSecret_TextOutputShowsTheNewSecretWithGuidance()
+    public async Task OnPremises_RotateBaselineSecret_TextOutputGivesGuidanceWithoutTheSecret()
     {
         UsePackage("Umbraco.Deploy.OnPrem", "17.4.0");
 
         CliResult result = await RunAsync("deploy", "init", "--baseline-url", "https://baseline.example.com", "--rotate-baseline-secret");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
-        Assert.That(result.Stdout, Does.Contain("New Baseline secret").And.Contain("ChildApiSecrets").And.Contain(GeneratedSecret));
+        Assert.That(result.Stdout, Does.Contain("The new Baseline secret was written to Umbraco:Deploy:Settings:BaselineApiSecret").And.Contain("ChildApiSecrets"));
+        Assert.That(result.Stdout + result.Stderr, Does.Not.Contain(GeneratedSecret));
     }
 
     [Test]
@@ -264,12 +290,13 @@ public class InitCommandTests
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
         Assert.That(JsonNode.Parse(File.ReadAllText(AppSettingsPath))!["Umbraco"]!["Deploy"]!["Settings"]!["ChildApiSecrets"]!["customer-a"]!.GetValue<string>(), Is.EqualTo(GeneratedSecret));
-        Assert.That(result.Stdout, Does.Contain("New child secret 'customer-a'").And.Contain("BaselineApiSecret").And.Contain(GeneratedSecret));
+        Assert.That(result.Stdout, Does.Contain("The new child secret 'customer-a' was written").And.Contain("BaselineApiSecret"));
+        Assert.That(result.Stdout + result.Stderr, Does.Not.Contain(GeneratedSecret));
         Assert.That(result.Stderr, Does.Contain("warning: The child secret 'customer-a' is stored in appsettings.json").And.Contain("Umbraco__Deploy__Settings__ChildApiSecrets__customer-a"));
     }
 
     [Test]
-    public async Task OnPremises_ChildSecretDryRun_MasksIt()
+    public async Task OnPremises_ChildSecretDryRun_WritesNothing()
     {
         UsePackage("Umbraco.Deploy.OnPrem", "17.4.0");
 

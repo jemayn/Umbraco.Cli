@@ -22,7 +22,7 @@ internal static class DeployCommands
         };
         var currentEnvironment = new Option<string>("--current-environment") { Description = "The name of the environment this site is (Umbraco Deploy On-Premises only)." };
         var projectId = new Option<string>("--project-id") { Description = $"The Umbraco Cloud project ID, set if not configured yet (Umbraco Deploy Cloud only) [env: {Cloud.CloudCredentialsResolver.ProjectIdVariable}]." };
-        var rotateSecret = new Option<bool>("--rotate-secret") { Description = "Replace an existing ApiSecret (or, on-premises, an ApiKey) with a new ApiSecret." };
+        var rotateSecret = new Option<bool>("--rotate-secret") { Description = "Replace an existing ApiSecret or ApiKey with a new ApiSecret (Umbraco Deploy On-Premises only)." };
         var baselineUrl = new Option<string>("--baseline-url") { Description = "The URL of the Baseline project's Live environment, for a Child project to restore from (Umbraco Deploy On-Premises only)." };
         var baselineSecret = new Option<string>("--baseline-secret") { Description = $"The Baseline secret of this Child project, as Base64 for at least 64 bytes [env: {InitCommandHandler.BaselineSecretVariable}, used with --baseline-url]." };
         var rotateBaselineSecret = new Option<bool>("--rotate-baseline-secret") { Description = "Generate a new Baseline secret for this Child project; set it as a child secret on the Baseline project." };

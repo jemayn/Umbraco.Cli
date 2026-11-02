@@ -69,7 +69,7 @@ internal static class ServiceRegistration
         services.AddTransient<UmbracoProjectCreator>();
         services.AddTransient<CloudInitCommandHandler>();
 
-        // Umbraco Deploy
+        // Umbraco Deploy (secrets are only generated for Umbraco Deploy On-Premises; Umbraco Cloud provisions its own)
         services.AddSingleton<Func<string>>(ApiSecret.Generate);
         services.AddSingleton<Func<Guid>>(Guid.NewGuid);
         services.AddSingleton<IDeployConfigurationWriter, OnPremisesConfigurationWriter>();

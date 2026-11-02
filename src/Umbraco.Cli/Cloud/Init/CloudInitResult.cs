@@ -33,7 +33,7 @@ internal sealed record CloudInitResult
     public required IReadOnlyList<string> FilesWritten { get; init; }
 
     /// <summary>
-    /// Gets <c>placeholder</c>, <c>provided</c> or <c>unchanged</c> (the ClientSecret itself is never written to output).
+    /// Gets <c>placeholder</c> (a new <c>umbraco-cloud.json</c> with placeholder Umbraco ID values) or <c>unchanged</c>.
     /// </summary>
     public required string Identity { get; init; }
 

@@ -27,6 +27,7 @@
     <File Path="docs/adr/0005-query-nuget-with-httpclient-and-nuget-versioning.md" />
     <File Path="docs/adr/0006-schema-deployments-use-the-hmac-schema-api.md" />
     <File Path="docs/adr/0007-apisecret-per-project-and-baseline-secret-per-connection.md" />
+    <File Path="docs/adr/0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Umbraco.Cli.Tests/Umbraco.Cli.Tests.csproj" />

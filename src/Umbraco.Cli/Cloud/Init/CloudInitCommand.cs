@@ -27,8 +27,6 @@ internal static class CloudInitCommand
         }.AcceptOnlyFromAmong("ide", "backoffice");
         var excludeGitignore = new Option<bool>("--exclude-gitignore") { Description = "Don't create .gitignore files (the .NET one at the repository root and the template's Umbraco-specific one in the project)." };
         var add = new Option<string[]>("--add") { Description = "A Product to add, such as forms (repeatable).", AllowMultipleArgumentsPerToken = false, HelpName = "product" };
-        var identityClientId = new Option<string>("--identity-client-id") { Description = $"The Umbraco ID client ID for umbraco-cloud.json [env: {IdentityValues.ClientIdVariable}]." };
-        var identityClientSecret = new Option<string>("--identity-client-secret") { Description = $"The Umbraco ID client secret for umbraco-cloud.json [env: {IdentityValues.ClientSecretVariable}]." };
         var allowEndOfLife = new Option<bool>("--allow-end-of-life") { Description = "Allow creating a project on an end-of-life Umbraco version." };
         var noBuild = new Option<bool>("--no-build") { Description = "Restore the project, but don't build it." };
         var nonInteractive = new Option<bool>("--non-interactive") { Description = "Never prompt; use defaults or fail when a required value is missing." };
@@ -48,8 +46,6 @@ internal static class CloudInitCommand
             developmentMode,
             excludeGitignore,
             add,
-            identityClientId,
-            identityClientSecret,
             allowEndOfLife,
             noBuild,
             nonInteractive,
@@ -68,8 +64,6 @@ internal static class CloudInitCommand
                 DevelopmentMode = parseResult.GetValue(developmentMode),
                 ExcludeGitignore = parseResult.GetValue(excludeGitignore),
                 Add = parseResult.GetValue(add) ?? [],
-                IdentityClientId = parseResult.GetValue(identityClientId),
-                IdentityClientSecret = parseResult.GetValue(identityClientSecret),
                 AllowEndOfLife = parseResult.GetValue(allowEndOfLife),
                 NoBuild = parseResult.GetValue(noBuild),
                 NonInteractive = parseResult.GetValue(nonInteractive),

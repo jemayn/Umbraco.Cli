@@ -52,7 +52,6 @@ internal sealed class CloudInitCommandHandler
         bool interactive = settings.NonInteractive is false && _environment.IsInputRedirected is false && _environment.IsErrorRedirected is false;
         ProductCatalog catalog = ProductCatalog.LoadEmbedded();
         ValidateProductKeys(settings.Add, catalog);
-        IdentityValues? identity = IdentityValues.Resolve(settings.IdentityClientId, settings.IdentityClientSecret, _environment);
 
         string? name = settings.Name;
         if (name is null && settings.Project is null && HasProjectFile(_environment.CurrentDirectory) is false)
@@ -117,7 +116,7 @@ internal sealed class CloudInitCommandHandler
             projectDirectory,
             plan.PresentProducts.Select(product => product.LicenseKey).OfType<string>(),
             filesWritten);
-        string identityState = CloudProjectSettings.EnsureUmbracoCloudJson(projectDirectory, identity, filesWritten);
+        string identityState = CloudProjectSettings.EnsureUmbracoCloudJson(projectDirectory, filesWritten);
         if (create is false && settings.IsGitDeployment && DotUmbracoFile.Ensure(projectPath, message => _reporter.Warning(message)) is string dotUmbraco)
         {
             filesWritten.Add(dotUmbraco);
@@ -211,13 +210,13 @@ internal sealed class CloudInitCommandHandler
 
         if (result.Identity == "placeholder")
         {
-            text.AppendLine($"  umbraco-cloud.json has placeholder Umbraco ID values for local login: the backoffice login works locally; for local Umbraco ID login, set {IdentityValues.ClientIdVariable} and {IdentityValues.ClientSecretVariable} to the values in a cloned Cloud project's umbraco-cloud.json and run umbraco cloud init again (Umbraco Cloud environments use their own values).");
+            text.AppendLine("  umbraco-cloud.json has placeholder Umbraco ID values: the backoffice login works locally, but Umbraco ID login doesn't (Umbraco Cloud environments use their own values). The CLI never writes the real values, because the client secret is a secret.");
         }
 
         text.AppendLine(result.Built ? "  Restored and built the project." : "  Restored the project.");
         text.AppendLine();
         text.AppendLine("Next steps:");
-        text.AppendLine("  1. Configure Umbraco Deploy (an ApiSecret shared by all environments, and optionally the environments to transfer content between):");
+        text.AppendLine("  1. Optionally configure the environments to transfer content between with Umbraco Deploy (Umbraco Cloud provisions the ApiSecret):");
         text.AppendLine($"       umbraco deploy init --project \"{result.ProjectPath}\"");
         text.AppendLine("  2. Run the project locally first, so Umbraco installs and Umbraco Deploy writes the schema to umbraco/Deploy/Revision:");
         text.AppendLine($"       dotnet run --project \"{result.ProjectPath}\"");
