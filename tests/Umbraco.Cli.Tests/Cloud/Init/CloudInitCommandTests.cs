@@ -305,6 +305,19 @@ public class CloudInitCommandTests
     }
 
     [Test]
+    public async Task Existing_WithCentralPackageManagement_AddsPackagesWithARestore()
+    {
+        string project = CreateExistingProject(("Umbraco.Cms", "17.7.0"));
+        File.WriteAllText(Path.Combine(_directory, "Directory.Packages.props"), "<Project />");
+
+        CliResult result = await RunAsync("cloud", "init", "--no-build");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        string[] add = _commands.First(command => command[0] == "package");
+        Assert.That(add, Is.EqualTo(new[] { "package", "add", "Umbraco.Cloud.Cms", "--version", "17.2.3", "--project", project }));
+    }
+
+    [Test]
     public async Task Existing_GitDeployment_WritesDotUmbraco()
     {
         CreateExistingProject(("Umbraco.Cms", "17.7.0"));

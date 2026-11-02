@@ -346,8 +346,12 @@ internal sealed class CloudInitCommandHandler
             }
 
             _reporter.Info($"Adding {package.Id} {version}.");
+
+            // With central package management, 'dotnet package add' only writes the version to Directory.Packages.props when it restores:
+            // with --no-restore it writes it on the PackageReference, which fails the restore with NU1008
+            string[] restoreOption = UsesCentralPackageManagement(projectPath) ? [] : ["--no-restore"];
             await _dotnetCli.RunAsync(
-                ["package", "add", package.Id, "--version", version.ToNormalizedString(), "--project", projectPath, "--no-restore"],
+                ["package", "add", package.Id, "--version", version.ToNormalizedString(), "--project", projectPath, .. restoreOption],
                 Path.GetDirectoryName(projectPath)!,
                 cancellationToken);
 
@@ -355,6 +359,22 @@ internal sealed class CloudInitCommandHandler
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Checks whether a <c>Directory.Packages.props</c> applies to the project, as MSBuild finds it: in the project's directory or any directory above it.
+    /// </summary>
+    private static bool UsesCentralPackageManagement(string projectPath)
+    {
+        for (DirectoryInfo? directory = new FileInfo(projectPath).Directory; directory is not null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Directory.Packages.props")))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task<bool> RestoreAndBuildAsync(string projectPath, bool noBuild, CancellationToken cancellationToken)
