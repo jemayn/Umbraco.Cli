@@ -148,7 +148,7 @@ internal sealed class CloudInitCommandHandler
             Built = built,
         };
 
-        _output.Write(result, CliJsonContext.Default.CloudInitResult, _ => FormatText(result, major));
+        _output.Write(result, CliJsonContext.Default.CloudInitResult, _ => FormatText(result));
         return ExitCodes.Success;
     }
 
@@ -186,7 +186,7 @@ internal sealed class CloudInitCommandHandler
 
     private static string FormatPhase(LifecyclePhase phase) => phase == LifecyclePhase.EndOfLife ? "end-of-life" : phase.ToString().ToLowerInvariant();
 
-    private static string FormatText(CloudInitResult result, UmbracoMajor major)
+    private static string FormatText(CloudInitResult result)
     {
         var text = new StringBuilder();
         text.AppendLine(result.Created

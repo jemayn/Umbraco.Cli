@@ -98,7 +98,7 @@ public class NuGetClientTests
     [Test]
     public void GetDependencies_PrefersNet10ThenOlderNetThenNetStandard()
     {
-        NuGetDependency Dependency(string id) => new(id, NuGet.Versioning.VersionRange.All);
+        static NuGetDependency Dependency(string id) => new(id, NuGet.Versioning.VersionRange.All);
         NuGetDependencyGroup[] groups =
         [
             new NuGetDependencyGroup(".NETFramework4.7.2", [Dependency("Framework")]),

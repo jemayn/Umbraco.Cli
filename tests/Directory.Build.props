@@ -8,9 +8,4 @@
     <UseAppHost>false</UseAppHost>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
-
-  <!-- Specify rule set for all test projects -->
-  <PropertyGroup>
-    <CodeAnalysisRuleSet>$(MSBuildThisFileDirectory)codeanalysis.ruleset</CodeAnalysisRuleSet>
-  </PropertyGroup>
 </Project>

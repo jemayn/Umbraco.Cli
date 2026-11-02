@@ -129,7 +129,7 @@ internal static class SchemaCommands
 
             command.Validators.Add(result =>
             {
-                if (result.GetValue(Environment) is null == result.GetValue(Url) is null)
+                if ((result.GetValue(Environment) is null) == (result.GetValue(Url) is null))
                 {
                     result.AddError("Specify exactly one of --environment or --url.");
                 }

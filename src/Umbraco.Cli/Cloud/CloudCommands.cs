@@ -187,7 +187,7 @@ internal static class CloudCommands
             {
                 command.Validators.Add(result =>
                 {
-                    if (result.GetValue(File) is null == result.GetValue(Path) is null)
+                    if ((result.GetValue(File) is null) == (result.GetValue(Path) is null))
                     {
                         result.AddError("Specify exactly one of --file or --path.");
                     }
