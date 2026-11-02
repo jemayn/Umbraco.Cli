@@ -16,6 +16,25 @@ internal sealed class CloudApiClient : ICloudApiClient
 
     public const string DefaultBaseAddress = "https://api.cloud.umbraco.com/";
 
+    /// <summary>
+    /// Gets the base address of the API: the default, or an override that must use HTTPS (HTTP only for localhost), because every request carries the API key.
+    /// </summary>
+    public static Uri GetBaseAddress(string? overrideUrl, string variable)
+    {
+        if (string.IsNullOrEmpty(overrideUrl))
+        {
+            return new Uri(DefaultBaseAddress);
+        }
+
+        if (Uri.TryCreate(overrideUrl.TrimEnd('/') + "/", UriKind.Absolute, out Uri? uri) is false
+            || (uri.Scheme != Uri.UriSchemeHttps && (uri.Scheme != Uri.UriSchemeHttp || uri.IsLoopback is false)))
+        {
+            throw new UsageException($"{variable} must be an absolute HTTPS URL (HTTP only for localhost), because the API key is sent with every request.");
+        }
+
+        return uri;
+    }
+
     public const int MaxPollAttempts = 5;
 
     private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromSeconds(5);

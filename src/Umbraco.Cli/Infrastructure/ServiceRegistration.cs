@@ -49,7 +49,7 @@ internal static class ServiceRegistration
         // Umbraco Cloud
         services.AddHttpClient<ICloudApiClient, CloudApiClient>(client =>
         {
-            client.BaseAddress = new Uri(environment.GetVariable(ApiUrlVariable) is { Length: > 0 } url ? url.TrimEnd('/') + "/" : CloudApiClient.DefaultBaseAddress);
+            client.BaseAddress = CloudApiClient.GetBaseAddress(environment.GetVariable(ApiUrlVariable), ApiUrlVariable);
             client.Timeout = Timeout.InfiniteTimeSpan;
         });
         services.AddSingleton<ArtifactZipBuilder>();

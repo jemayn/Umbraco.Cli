@@ -208,6 +208,19 @@ public class CloudApiClientTests
     public void GetBackoff_DoublesUpToThePollInterval(int attempt, int expectedSeconds)
         => Assert.That(CloudApiClient.GetBackoff(attempt), Is.EqualTo(TimeSpan.FromSeconds(expectedSeconds)));
 
+    [TestCase(null, "https://api.cloud.umbraco.com/")]
+    [TestCase("", "https://api.cloud.umbraco.com/")]
+    [TestCase("https://api.example.com", "https://api.example.com/")]
+    [TestCase("http://localhost:5000/", "http://localhost:5000/")]
+    public void GetBaseAddress_AcceptsHttpsAndLocalHttp(string? url, string expected)
+        => Assert.That(CloudApiClient.GetBaseAddress(url, "VARIABLE").ToString(), Is.EqualTo(expected));
+
+    [TestCase("http://api.example.com")]
+    [TestCase("ftp://api.example.com")]
+    [TestCase("not a url")]
+    public void GetBaseAddress_RefusesUrlsThatWouldExposeTheApiKey(string url)
+        => Assert.That(() => CloudApiClient.GetBaseAddress(url, "VARIABLE"), Throws.TypeOf<UsageException>().With.Message.Contains("VARIABLE"));
+
     private CloudApiClient CreateClient() => new(CreateHttpClient(), _timeProvider, Mock.Of<IReporter>());
 
     private HttpClient CreateHttpClient() => new(_handler, disposeHandler: false) { BaseAddress = new Uri("https://api.test/") };
