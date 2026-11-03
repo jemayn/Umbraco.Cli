@@ -82,6 +82,13 @@ internal sealed class ArtifactUploader
         ArtifactPackage package = await _zipBuilder.CreateAsync(source.Directory!, source.Type, cancellationToken);
         string kind = package.Type == DeploymentType.Git ? "a Git deployment (source code)" : "an Artifact deployment (published output)";
         _reporter.Info($"Zipped '{source.Directory}' for {kind}: {ByteSize.Format(package.Length)}.");
+        if (package.ExcludedFiles.Count > 0)
+        {
+            const int listed = 5;
+            string more = package.ExcludedFiles.Count > listed ? $" and {package.ExcludedFiles.Count - listed} more" : string.Empty;
+            _reporter.Info($"Left out files that are never deployed (environment files, local databases, logs and temporary files): {string.Join(", ", package.ExcludedFiles.Take(listed))}{more}.");
+        }
+
         return package;
     }
 }

@@ -69,6 +69,7 @@ umbraco cloud deployments show <deployment-id> --wait
 ```
 
 - `--path` zips a directory. The deployment type is detected like Umbraco Cloud does: `Umbraco.Core.dll` at the root means published output (all files are included), a project or solution file means source code (the files git would commit are included, so `.gitignore` is honoured). Use `--type git|artifact` to override.
+- Some files are never deployed, also when git would commit them: environment files (`.env`, `.env.*`), local SQLite databases (`*.sqlite.db`), and Umbraco's logs and temporary files (`umbraco/Logs`, `umbraco/Data/TEMP`). The files left out are listed.
 - A Git deployment needs the `.umbraco` file of your Umbraco Cloud repository at its root, unless you deploy with `--skip-preserve-umbraco-cloud-json`.
 - Artifacts can be at most 256 MiB.
 - The commit message defaults to the subject of the current git `HEAD` commit; use `--message` to set it.

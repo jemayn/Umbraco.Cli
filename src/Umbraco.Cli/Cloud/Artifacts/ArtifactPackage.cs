@@ -27,6 +27,11 @@ internal sealed class ArtifactPackage : IDisposable
 
     public bool IsTemporary { get; }
 
+    /// <summary>
+    /// Gets the files that were left out of the zip (see <see cref="ArtifactExclusions" />).
+    /// </summary>
+    public IReadOnlyList<string> ExcludedFiles { get; init; } = [];
+
     public long Length => new FileInfo(ZipPath).Length;
 
     public void Dispose()
