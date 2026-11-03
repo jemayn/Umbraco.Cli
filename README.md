@@ -45,12 +45,12 @@ umbraco cloud init --name MySite --version lts --add forms -- --development-data
 
 ## Umbraco Cloud deployments
 
-These commands use the [Umbraco Cloud CI/CD API](https://docs.umbraco.com/umbraco-cloud/build-and-customize-your-solution/handle-deployments-and-environments/umbraco-cicd/umbraco-cloud-api). Get the project ID and CI/CD API key from the Umbraco Cloud Portal (**Configuration > CI/CD Flow**) and pass them as options or environment variables (they are never stored or printed). Prefer the environment variable for the API key, ideally from your pipeline's secret store: an `--api-key` value ends up in shell history and process listings.
+These commands use the [Umbraco Cloud CI/CD API](https://docs.umbraco.com/umbraco-cloud/build-and-customize-your-solution/handle-deployments-and-environments/umbraco-cicd/umbraco-cloud-api). Get the project ID and CI/CD API key from the Umbraco Cloud Portal (**Configuration > CI/CD Flow**). The API key is a secret, so it's only read from the `UMBRACO_CLOUD_API_KEY` environment variable (in a pipeline, from its secret store), never from an option, and it's never stored or printed:
 
 | Option | Environment variable |
 |---|---|
 | `--project-id` | `UMBRACO_CLOUD_PROJECT_ID` |
-| `--api-key` | `UMBRACO_CLOUD_API_KEY` |
+| | `UMBRACO_CLOUD_API_KEY` |
 
 When neither gives the project ID, it's read from `Deploy:Project:Id` in `umbraco-cloud.json` (`umbraco deploy init --project-id` sets it): `--config` points at the file or a folder containing it, and defaults to the uploaded `--path` (at its root for published output, or in the Umbraco project that its `.umbraco` file points at for source code). For example, to deploy an uploaded artifact: `umbraco cloud deployments deploy --artifact-id <id> --environment live --config publish`.
 
@@ -116,7 +116,7 @@ UMBRACO_DEPLOY_BASELINE_SECRET="<the child secret>" umbraco deploy init --baseli
 | Option | Applies to | Meaning |
 |---|---|---|
 | `--baseline-url <url>` | Child project | Sets `BaselineUrl`, the absolute HTTPS URL of the Baseline project's Live environment (HTTP only for localhost, and without a user name or password) |
-| `--baseline-secret <base64>` (`UMBRACO_DEPLOY_BASELINE_SECRET`) | Child project | Sets `BaselineApiSecret` (Base64, at least 64 bytes). The environment variable is only used with `--baseline-url` or a configured `BaselineUrl` (On-Premises) |
+| `UMBRACO_DEPLOY_BASELINE_SECRET` (environment variable) | Child project | Sets `BaselineApiSecret` (Base64, at least 64 bytes). Only used with `--baseline-url` or a configured `BaselineUrl` (On-Premises) |
 | `--rotate-baseline-secret` | Child project | Generates a new `BaselineApiSecret`, to be added to `ChildApiSecrets` on the Baseline project |
 | `--remove-baseline` | Child project | Removes `BaselineUrl` and `BaselineApiSecret` (cannot be combined with the other Child project options) |
 | `--child-secret <name>` | Baseline project | Generates `ChildApiSecrets:<name>`, to be set as `BaselineApiSecret` on the Child project. A valid existing entry is kept |
@@ -137,7 +137,7 @@ UMBRACO_DEPLOY_BASELINE_SECRET="<the child secret>" umbraco deploy init --baseli
 umbraco deploy schema deploy --config publish --environment Live
 ```
 
-Or give the URL directly, with the ApiSecret in the `UMBRACO_DEPLOY_API_SECRET` environment variable (prefer environment variables over `--api-secret`, which ends up in shell history and process listings):
+Or give the URL directly, with the ApiSecret in the `UMBRACO_DEPLOY_API_SECRET` environment variable (secrets are never options):
 
 ```sh
 UMBRACO_DEPLOY_API_SECRET="$DEPLOY_API_SECRET" umbraco deploy schema deploy --url https://www.example.com --reason "Release 42"
@@ -149,8 +149,8 @@ umbraco deploy schema show --url https://www.example.com --wait   # the current 
 | `--environment`, `-e` | | The Environment's name in the Umbraco Deploy configuration (`Workspaces`) in `--config` |
 | `--url` | | The Environment's URL, instead of `--environment` |
 | `--config` | | The `appsettings.json` or `umbraco-cloud.json`, or the folder containing them (default: the current directory) |
-| `--api-secret` | `UMBRACO_DEPLOY_API_SECRET` | The ApiSecret (default: the one in `--config`) |
-| `--api-key` | `UMBRACO_DEPLOY_API_KEY` | The obsolete ApiKey, instead of an ApiSecret |
+| | `UMBRACO_DEPLOY_API_SECRET` | The ApiSecret (default: the one in `--config`) |
+| | `UMBRACO_DEPLOY_API_KEY` | The obsolete ApiKey, instead of an ApiSecret |
 
 - The requests are signed with the ApiSecret, so it must be the one the Environment uses, and the clocks of both machines must agree within 20 minutes.
 - Umbraco Deploy only keeps the status in memory: when it stays unknown for a minute (the site restarted, or another Umbraco Deploy operation was running), the schema deployment is started once more.

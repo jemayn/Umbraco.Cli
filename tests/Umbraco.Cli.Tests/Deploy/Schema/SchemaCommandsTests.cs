@@ -88,7 +88,9 @@ public class SchemaCommandsTests
             .Respond(HttpStatusCode.OK, $$"""{ "TaskId": "{{TaskId}}", "TaskStarted": false }""")
             .Respond(HttpStatusCode.OK, Status("Completed"));
 
-        CliResult result = await RunAsync("deploy", "schema", "deploy", "--url", "https://example.com", "--api-secret", Secret);
+        _environment.Variables[SchemaTargetResolver.ApiSecretVariable] = Secret;
+
+        CliResult result = await RunAsync("deploy", "schema", "deploy", "--url", "https://example.com");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
         Assert.That(result.Stderr, Does.Contain($"Joined schema deployment {TaskId} on https://example.com"));
@@ -100,7 +102,9 @@ public class SchemaCommandsTests
     {
         _handler.Respond(HttpStatusCode.OK, Started());
 
-        CliResult result = await RunAsync("deploy", "schema", "deploy", "--url", "https://example.com", "--api-key", "legacy-key", "--no-wait");
+        _environment.Variables[SchemaTargetResolver.ApiKeyVariable] = "legacy-key";
+
+        CliResult result = await RunAsync("deploy", "schema", "deploy", "--url", "https://example.com", "--no-wait");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
         Assert.That(result.Stdout.Trim(), Is.EqualTo($"Schema deployment {TaskId} to https://example.com started."));
@@ -112,10 +116,12 @@ public class SchemaCommandsTests
     {
         _handler.Respond(HttpStatusCode.Unauthorized);
 
-        CliResult result = await RunAsync("deploy", "schema", "deploy", "--url", "https://example.com", "--api-secret", Secret);
+        _environment.Variables[SchemaTargetResolver.ApiSecretVariable] = Secret;
+
+        CliResult result = await RunAsync("deploy", "schema", "deploy", "--url", "https://example.com");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.AuthenticationFailed), result.ToString());
-        Assert.That(result.Stderr, Does.Contain("rejected the credentials").And.Contain("--api-secret"));
+        Assert.That(result.Stderr, Does.Contain("rejected the credentials").And.Contain(SchemaTargetResolver.ApiSecretVariable));
         Assert.That(result.ToString(), Does.Not.Contain(Secret));
     }
 
@@ -160,7 +166,9 @@ public class SchemaCommandsTests
     {
         _handler.Respond(HttpStatusCode.OK, $$"""{ "Id": "{{TaskId}}", "Status": "Unknown", "Comment": "No work item found with the specified Id", "Percent": 0 }""");
 
-        CliResult result = await RunAsync("deploy", "schema", "show", TaskId.ToString(), "--url", "https://example.com", "--api-secret", Secret);
+        _environment.Variables[SchemaTargetResolver.ApiSecretVariable] = Secret;
+
+        CliResult result = await RunAsync("deploy", "schema", "show", TaskId.ToString(), "--url", "https://example.com");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Error), result.ToString());
         Assert.That(result.Stderr, Does.Contain($"doesn't know the schema deployment {TaskId}"));
@@ -174,7 +182,9 @@ public class SchemaCommandsTests
             .Respond(HttpStatusCode.OK, Status("Executing"))
             .Respond(HttpStatusCode.OK, Status("Completed"));
 
-        CliResult result = await RunAsync("deploy", "schema", "show", TaskId.ToString(), "--wait", "--url", "https://example.com", "--api-secret", Secret);
+        _environment.Variables[SchemaTargetResolver.ApiSecretVariable] = Secret;
+
+        CliResult result = await RunAsync("deploy", "schema", "show", TaskId.ToString(), "--wait", "--url", "https://example.com");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
         Assert.That(result.Stdout.Trim(), Is.EqualTo($"Schema deployment {TaskId} to https://example.com: Completed."));

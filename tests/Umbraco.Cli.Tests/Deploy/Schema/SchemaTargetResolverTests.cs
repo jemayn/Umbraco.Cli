@@ -29,20 +29,22 @@ public class SchemaTargetResolverTests
     [Test]
     public void Resolve_Url_UsesOptionsAndKeepsThePathBase()
     {
-        SchemaTarget target = SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = "https://example.com/site/", ApiSecret = CloudSecret }, _environment);
+        _environment.Variables[SchemaTargetResolver.ApiSecretVariable] = CloudSecret;
+
+        SchemaTarget target = SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = "https://example.com/site/" }, _environment);
 
         Assert.That(target.BaseUrl, Is.EqualTo(new Uri("https://example.com/site/")));
         Assert.That(target.Url, Is.EqualTo("https://example.com/site"));
         Assert.That(target.Environment, Is.Null);
         Assert.That(target.DisplayName, Is.EqualTo("https://example.com/site"));
         Assert.That(Key(target), Is.EqualTo("cloud-secret"));
-        Assert.That(target.Credentials.Source, Is.EqualTo("--api-secret"));
+        Assert.That(target.Credentials.Source, Is.EqualTo(SchemaTargetResolver.ApiSecretVariable));
     }
 
     [TestCase("http://example.com")]
     [TestCase("example.com")]
     public void Resolve_InvalidUrl_ThrowsUsageException(string url)
-        => Assert.Throws<UsageException>(() => SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = url, ApiSecret = CloudSecret }, _environment));
+        => Assert.Throws<UsageException>(() => SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = url }, new FakeEnvironment(_directory) { Variables = { [SchemaTargetResolver.ApiSecretVariable] = CloudSecret } }));
 
     [Test]
     public void Resolve_Environment_UsesTheWorkspacesOfUmbracoCloudJsonFirst()
@@ -98,18 +100,19 @@ public class SchemaTargetResolverTests
     }
 
     [Test]
-    public void Resolve_PrefersOptionsThenEnvironmentVariablesThenFiles()
+    public void Resolve_PrefersEnvironmentVariablesOverFiles()
     {
         WriteCloudJson();
         _environment.Variables[SchemaTargetResolver.ApiSecretVariable] = AppSettingsSecret;
 
-        SchemaTarget fromVariable = SchemaTargetResolver.Resolve(new SchemaTargetSettings { Environment = "Live" }, _environment);
-        SchemaTarget fromOption = SchemaTargetResolver.Resolve(new SchemaTargetSettings { Environment = "Live", ApiKey = "my-key" }, _environment);
+        SchemaTarget fromSecretVariable = SchemaTargetResolver.Resolve(new SchemaTargetSettings { Environment = "Live" }, _environment);
+        _environment.Variables[SchemaTargetResolver.ApiKeyVariable] = "my-key";
+        SchemaTarget fromKeyVariable = SchemaTargetResolver.Resolve(new SchemaTargetSettings { Environment = "Live" }, _environment);
 
-        Assert.That(Key(fromVariable), Is.EqualTo("appsettings-secret"));
-        Assert.That(fromVariable.Credentials.Source, Is.EqualTo(SchemaTargetResolver.ApiSecretVariable));
-        Assert.That(Key(fromOption), Is.EqualTo("my-key"));
-        Assert.That(fromOption.Credentials.Source, Is.EqualTo("--api-key"));
+        Assert.That(Key(fromSecretVariable), Is.EqualTo("appsettings-secret"));
+        Assert.That(fromSecretVariable.Credentials.Source, Is.EqualTo(SchemaTargetResolver.ApiSecretVariable));
+        Assert.That(Key(fromKeyVariable), Is.EqualTo("my-key"));
+        Assert.That(fromKeyVariable.Credentials.Source, Is.EqualTo(SchemaTargetResolver.ApiKeyVariable));
     }
 
     [Test]
@@ -130,9 +133,11 @@ public class SchemaTargetResolverTests
     [Test]
     public void Resolve_InvalidBase64Secret_ThrowsUsageExceptionWithoutTheSecret()
     {
-        UsageException exception = Assert.Throws<UsageException>(() => SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = "https://example.com", ApiSecret = "not base64!" }, _environment))!;
+        _environment.Variables[SchemaTargetResolver.ApiSecretVariable] = "not base64!";
 
-        Assert.That(exception.Message, Does.Contain("--api-secret").And.Not.Contain("not base64!"));
+        UsageException exception = Assert.Throws<UsageException>(() => SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = "https://example.com" }, _environment))!;
+
+        Assert.That(exception.Message, Does.Contain(SchemaTargetResolver.ApiSecretVariable).And.Not.Contain("not base64!"));
     }
 
     [Test]
@@ -140,17 +145,23 @@ public class SchemaTargetResolverTests
     {
         UsageException exception = Assert.Throws<UsageException>(() => SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = "https://example.com" }, _environment))!;
 
-        Assert.That(exception.Hint, Does.Contain("--api-secret").And.Contain(SchemaTargetResolver.ApiSecretVariable).And.Contain("--config"));
+        Assert.That(exception.Hint, Does.Contain(SchemaTargetResolver.ApiSecretVariable).And.Contain("--config").And.Not.Contain("--api-secret"));
     }
 
     [Test]
     public void Resolve_MissingFolder_ThrowsUsageException()
-        => Assert.Throws<UsageException>(() => SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = "https://example.com", ApiSecret = CloudSecret, Config = "missing" }, _environment));
+    {
+        _environment.Variables[SchemaTargetResolver.ApiSecretVariable] = CloudSecret;
+
+        Assert.Throws<UsageException>(() => SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = "https://example.com", Config = "missing" }, _environment));
+    }
 
     [Test]
     public void Credentials_ToString_DoesNotContainTheKey()
     {
-        SchemaTarget target = SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = "https://example.com", ApiKey = "my-key" }, _environment);
+        _environment.Variables[SchemaTargetResolver.ApiKeyVariable] = "my-key";
+
+        SchemaTarget target = SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = "https://example.com" }, _environment);
 
         Assert.That(target.ToString(), Does.Not.Contain("my-key"));
     }

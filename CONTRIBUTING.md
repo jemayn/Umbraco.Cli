@@ -61,7 +61,7 @@ dotnet tool update --global Umbraco.Cli --add-source artifacts --prerelease
 
 - Never generate a secret for Umbraco Cloud or write one to a file that is committed: Umbraco Cloud provisions its secrets ([ADR 0008](docs/adr/0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md)).
 - Never write a secret to the output (text, JSON or `--verbose`), so it can't end up in CI/CD logs.
-- Accept secrets from environment variables, and document the environment variable rather than a command-line option.
+- Only read secrets from environment variables, never from command-line options ([ADR 0009](docs/adr/0009-secrets-are-only-read-from-environment-variables.md)), and when one is missing, fail with an error that names the variable and says how to get the value.
 
 ### Domain language and decisions
 

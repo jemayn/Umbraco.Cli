@@ -87,7 +87,7 @@ public class DeployApiClientTests
 
         Assert.That(exception.ExitCode, Is.EqualTo(ExitCodes.AuthenticationFailed));
         Assert.That(exception.Message, Does.Contain("rejected the credentials"));
-        Assert.That(exception.Hint, Does.Contain("--api-secret").And.Contain("20 minutes"));
+        Assert.That(exception.Hint, Does.Contain("UMBRACO_DEPLOY_API_SECRET").And.Contain("20 minutes"));
         Assert.That(exception.IsTransient, Is.False);
     }
 
@@ -139,7 +139,7 @@ public class DeployApiClientTests
         Assert.That(exception.Message, Does.Contain("unexpected response"));
     }
 
-    private static SchemaTarget Target(string url) => new(new Uri(url.TrimEnd('/') + "/"), null, new DeployCredentials(Key, "--api-secret"));
+    private static SchemaTarget Target(string url) => new(new Uri(url.TrimEnd('/') + "/"), null, new DeployCredentials(Key, "UMBRACO_DEPLOY_API_SECRET"));
 
     private static void AssertValidToken(RecordedRequest request)
     {

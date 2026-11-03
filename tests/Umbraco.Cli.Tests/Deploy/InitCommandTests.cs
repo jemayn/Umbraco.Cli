@@ -209,12 +209,14 @@ public class InitCommandTests
     }
 
     [Test]
-    public async Task OnPremises_BaselineUrlAndSecret_AreWrittenWithoutPrintingTheSecret()
+    public async Task OnPremises_BaselineUrlAndSecretVariable_AreWrittenWithoutPrintingTheSecret()
     {
         UsePackage("Umbraco.Deploy.OnPrem", "17.4.0");
         string secret = Convert.ToBase64String(new byte[64]);
 
-        CliResult result = await RunAsync("deploy", "init", "--baseline-url", "https://baseline.example.com/", "--baseline-secret", secret, "-o", "json");
+        _environment.Variables["UMBRACO_DEPLOY_BASELINE_SECRET"] = secret;
+
+        CliResult result = await RunAsync("deploy", "init", "--baseline-url", "https://baseline.example.com/", "-o", "json");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
         JsonNode settings = JsonNode.Parse(File.ReadAllText(AppSettingsPath))!["Umbraco"]!["Deploy"]!["Settings"]!;
@@ -331,7 +333,6 @@ public class InitCommandTests
 
     [TestCase("--baseline-url", "baseline.example.com")]
     [TestCase("--baseline-url", "http://baseline.example.com")]
-    [TestCase("--baseline-secret", "too-short")]
     [TestCase("--child-secret", " ")]
     [TestCase("--child-secret", "a:b")]
     [TestCase("--remove-child-secret", "a:b")]
@@ -358,9 +359,7 @@ public class InitCommandTests
         Assert.That(File.Exists(AppSettingsPath), Is.False);
     }
 
-    [TestCase("--rotate-baseline-secret", "--baseline-secret")]
     [TestCase("--remove-baseline", "--baseline-url")]
-    [TestCase("--remove-baseline", "--baseline-secret")]
     [TestCase("--remove-baseline", "--rotate-baseline-secret")]
     public async Task OnPremises_ConflictingChildOptions_ReturnsUsageExitCode(string first, string second)
     {
@@ -384,11 +383,11 @@ public class InitCommandTests
     }
 
     [Test]
-    public async Task OnPremises_BaselineSecretWithoutUrl_Warns()
+    public async Task OnPremises_RotatedBaselineSecretWithoutUrl_Warns()
     {
         UsePackage("Umbraco.Deploy.OnPrem", "17.4.0");
 
-        CliResult result = await RunAsync("deploy", "init", "--baseline-secret", Convert.ToBase64String(new byte[64]));
+        CliResult result = await RunAsync("deploy", "init", "--rotate-baseline-secret");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
         Assert.That(result.Stderr, Does.Contain("BaselineUrl"));
@@ -477,7 +476,6 @@ public class InitCommandTests
         => option switch
         {
             "--baseline-url" => ["https://baseline.example.com"],
-            "--baseline-secret" => [Convert.ToBase64String(new byte[64])],
             _ => [],
         };
 

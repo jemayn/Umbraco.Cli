@@ -220,14 +220,13 @@ internal sealed class InitCommandHandler
 
     private bool IsBaselineVariableApplicable(InitCommandSettings settings)
         => string.IsNullOrWhiteSpace(_environment.GetVariable(BaselineSecretVariable)) is false
-            && settings.BaselineSecret is null
             && settings.RotateBaselineSecret is false
             && settings.RemoveBaseline is false;
 
     private BaselineOptions? ValidateBaselineOptions(InitCommandSettings settings, DeployPackage package, JsonDocumentEditor document, out bool secretFromVariable)
     {
         secretFromVariable = false;
-        var requested = new BaselineOptions(settings.BaselineUrl, settings.BaselineSecret, settings.RotateBaselineSecret, settings.RemoveBaseline, settings.ChildSecret, settings.RemoveChildSecret);
+        var requested = new BaselineOptions(settings.BaselineUrl, Secret: null, settings.RotateBaselineSecret, settings.RemoveBaseline, settings.ChildSecret, settings.RemoveChildSecret);
 
         string? variableSecret = null;
         if (package == DeployPackage.OnPremises && IsBaselineVariableApplicable(settings))
@@ -245,17 +244,12 @@ internal sealed class InitCommandHandler
         {
             throw new UsageException(
                 "The Baseline options only apply to Umbraco Deploy On-Premises; Umbraco Cloud provisions the Baseline settings itself.",
-                "Remove --baseline-url, --baseline-secret, --rotate-baseline-secret, --remove-baseline, --child-secret and --remove-child-secret.");
+                "Remove --baseline-url, --rotate-baseline-secret, --remove-baseline, --child-secret and --remove-child-secret.");
         }
 
-        if (settings.RotateBaselineSecret && settings.BaselineSecret is not null)
+        if (settings.RemoveBaseline && (settings.BaselineUrl is not null || settings.RotateBaselineSecret))
         {
-            throw new UsageException("--rotate-baseline-secret and --baseline-secret cannot be combined.");
-        }
-
-        if (settings.RemoveBaseline && (settings.BaselineUrl is not null || settings.BaselineSecret is not null || settings.RotateBaselineSecret))
-        {
-            throw new UsageException("--remove-baseline cannot be combined with --baseline-url, --baseline-secret or --rotate-baseline-secret.");
+            throw new UsageException("--remove-baseline cannot be combined with --baseline-url or --rotate-baseline-secret.");
         }
 
         string? url = null;
@@ -272,12 +266,12 @@ internal sealed class InitCommandHandler
             }
         }
 
-        string? secret = settings.BaselineSecret ?? variableSecret;
+        string? secret = variableSecret;
         secretFromVariable = variableSecret is not null;
         if (secret is not null && ApiSecret.IsValid(secret) is false)
         {
             throw new UsageException(
-                $"{(secretFromVariable ? BaselineSecretVariable : "--baseline-secret")} must be Base64 for at least 64 bytes.", "Generate one with --rotate-baseline-secret, or --child-secret on the Baseline project.");
+                $"{BaselineSecretVariable} must be Base64 for at least 64 bytes.", "Generate one with --rotate-baseline-secret, or --child-secret on the Baseline project.");
         }
 
         string? childSecret = ValidateChildSecretName(settings.ChildSecret, "--child-secret");

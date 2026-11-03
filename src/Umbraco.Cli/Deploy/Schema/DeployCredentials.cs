@@ -14,7 +14,7 @@ internal sealed class DeployCredentials
     }
 
     /// <summary>
-    /// Gets where the key was found, such as <c>--api-secret</c> or <c>umbraco-cloud.json</c> (for messages).
+    /// Gets where the key was found, such as <c>UMBRACO_DEPLOY_API_SECRET</c> or <c>umbraco-cloud.json</c> (for messages).
     /// </summary>
     public string Source { get; }
 

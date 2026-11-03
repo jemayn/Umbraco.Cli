@@ -23,8 +23,7 @@ internal static class DeployCommands
         var currentEnvironment = new Option<string>("--current-environment") { Description = "The name of the environment this site is (Umbraco Deploy On-Premises only)." };
         var projectId = new Option<string>("--project-id") { Description = $"The Umbraco Cloud project ID, set if not configured yet (Umbraco Deploy Cloud only) [env: {Cloud.CloudCredentialsResolver.ProjectIdVariable}]." };
         var rotateSecret = new Option<bool>("--rotate-secret") { Description = "Replace an existing ApiSecret or ApiKey with a new ApiSecret (Umbraco Deploy On-Premises only)." };
-        var baselineUrl = new Option<string>("--baseline-url") { Description = "The URL of the Baseline project's Live environment, for a Child project to restore from (Umbraco Deploy On-Premises only)." };
-        var baselineSecret = new Option<string>("--baseline-secret") { Description = $"The Baseline secret of this Child project, as Base64 for at least 64 bytes [env: {InitCommandHandler.BaselineSecretVariable}, used with --baseline-url]." };
+        var baselineUrl = new Option<string>("--baseline-url") { Description = $"The URL of the Baseline project's Live environment, for a Child project to restore from, with the Baseline secret from the {InitCommandHandler.BaselineSecretVariable} environment variable (Umbraco Deploy On-Premises only)." };
         var rotateBaselineSecret = new Option<bool>("--rotate-baseline-secret") { Description = "Generate a new Baseline secret for this Child project; set it as a child secret on the Baseline project." };
         var removeBaseline = new Option<bool>("--remove-baseline") { Description = "Remove the Baseline URL and Baseline secret of this Child project." };
         var childSecret = new Option<string>("--child-secret") { Description = "Generate the child secret with this name for a Child project of this Baseline project; a valid existing one is kept." };
@@ -40,7 +39,6 @@ internal static class DeployCommands
             projectId,
             rotateSecret,
             baselineUrl,
-            baselineSecret,
             rotateBaselineSecret,
             removeBaseline,
             childSecret,
@@ -59,7 +57,6 @@ internal static class DeployCommands
                 ProjectId = parseResult.GetValue(projectId),
                 RotateSecret = parseResult.GetValue(rotateSecret),
                 BaselineUrl = parseResult.GetValue(baselineUrl),
-                BaselineSecret = parseResult.GetValue(baselineSecret),
                 RotateBaselineSecret = parseResult.GetValue(rotateBaselineSecret),
                 RemoveBaseline = parseResult.GetValue(removeBaseline),
                 ChildSecret = parseResult.GetValue(childSecret),

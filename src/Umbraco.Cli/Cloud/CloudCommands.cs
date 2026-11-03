@@ -25,16 +25,15 @@ internal static class CloudCommands
     private static Command CreateUploadCommand(Func<IServiceProvider> services)
     {
         Option<string> projectId = CreateProjectIdOption(fromPath: true);
-        Option<string> apiKey = CreateApiKeyOption();
         Option<string> config = CreateConfigOption(fromPath: true);
         ArtifactOptions artifact = new();
 
-        var command = new Command("upload", "Upload a zip file or directory as an artifact.") { projectId, apiKey, config };
+        var command = new Command("upload", "Upload a zip file or directory as an artifact.") { projectId, config };
         artifact.AddTo(command, required: true);
 
         command.SetAction((parseResult, cancellationToken) => services()
             .GetRequiredService<UploadCommandHandler>()
-            .HandleAsync(new UploadCommandSettings(parseResult.GetValue(projectId), parseResult.GetValue(apiKey), artifact.GetSource(parseResult), parseResult.GetValue(config)), cancellationToken));
+            .HandleAsync(new UploadCommandSettings(parseResult.GetValue(projectId), artifact.GetSource(parseResult), parseResult.GetValue(config)), cancellationToken));
 
         return command;
     }
@@ -42,7 +41,6 @@ internal static class CloudCommands
     private static Command CreateDeployCommand(Func<IServiceProvider> services)
     {
         Option<string> projectId = CreateProjectIdOption(fromPath: true);
-        Option<string> apiKey = CreateApiKeyOption();
         Option<string> config = CreateConfigOption(fromPath: true);
         var artifactId = new Option<string>("--artifact-id") { Description = "The ID of an uploaded artifact to deploy." };
         ArtifactOptions artifact = new();
@@ -62,7 +60,6 @@ internal static class CloudCommands
         var command = new Command("deploy", "Deploy an artifact to an environment, uploading it first when a file or directory is given.")
         {
             projectId,
-            apiKey,
             config,
             artifactId,
             environment,
@@ -89,7 +86,6 @@ internal static class CloudCommands
             var settings = new DeployCommandSettings
             {
                 ProjectId = parseResult.GetValue(projectId),
-                ApiKey = parseResult.GetValue(apiKey),
                 Config = parseResult.GetValue(config),
                 ArtifactId = parseResult.GetValue(artifactId),
                 Source = parseResult.GetValue(artifactId) is null ? artifact.GetSource(parseResult) : null,
@@ -112,18 +108,16 @@ internal static class CloudCommands
     private static Command CreateShowCommand(Func<IServiceProvider> services)
     {
         Option<string> projectId = CreateProjectIdOption(fromPath: false);
-        Option<string> apiKey = CreateApiKeyOption();
         Option<string> config = CreateConfigOption(fromPath: false);
         var deploymentId = new Argument<string>("deployment-id") { Description = "The ID of the deployment." };
         var wait = new Option<bool>("--wait") { Description = "Wait until the deployment has completed or failed." };
         Option<TimeSpan> timeout = CreateTimeoutOption();
 
-        var command = new Command("show", "Show the status of a deployment.") { deploymentId, projectId, apiKey, config, wait, timeout };
+        var command = new Command("show", "Show the status of a deployment.") { deploymentId, projectId, config, wait, timeout };
         command.SetAction((parseResult, cancellationToken) =>
         {
             var settings = new ShowCommandSettings(
                 parseResult.GetValue(projectId),
-                parseResult.GetValue(apiKey),
                 parseResult.GetRequiredValue(deploymentId),
                 parseResult.GetValue(wait),
                 parseResult.GetValue(timeout),
@@ -147,11 +141,6 @@ internal static class CloudCommands
         Description = fromPath
             ? "The umbraco-cloud.json to read the project ID from, or a folder containing it (default: the one in --path)."
             : "The umbraco-cloud.json to read the project ID from, or a folder containing it.",
-    };
-
-    private static Option<string> CreateApiKeyOption() => new("--api-key")
-    {
-        Description = $"The Umbraco Cloud CI/CD API key [env: {CloudCredentialsResolver.ApiKeyVariable}].",
     };
 
     private static Option<TimeSpan> CreateTimeoutOption()

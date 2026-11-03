@@ -247,7 +247,7 @@ internal sealed class CloudApiClient : ICloudApiClient
                 HttpStatusCode.Unauthorized => new CloudApiException(
                     response.StatusCode,
                     "Umbraco Cloud rejected the credentials (401 Unauthorized).",
-                    "Check the project ID and CI/CD API key (--project-id/UMBRACO_CLOUD_PROJECT_ID and --api-key/UMBRACO_CLOUD_API_KEY)."),
+                    "Check the project ID (--project-id or UMBRACO_CLOUD_PROJECT_ID) and the CI/CD API key (UMBRACO_CLOUD_API_KEY)."),
                 _ => new CloudApiException(
                     response.StatusCode,
                     $"Umbraco Cloud responded {(int)response.StatusCode} {response.ReasonPhrase}{FormatProblem(problem)}."),
