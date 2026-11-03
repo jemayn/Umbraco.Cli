@@ -13,6 +13,7 @@ namespace Umbraco.Cli.Cloud.Api;
 [JsonSerializable(typeof(StartDeploymentRequest))]
 [JsonSerializable(typeof(DeploymentResponse))]
 [JsonSerializable(typeof(ProblemDetailsResponse))]
+[JsonSerializable(typeof(LocalDevelopmentValuesResponse))]
 internal sealed partial class CloudJsonContext : JsonSerializerContext
 {
 }

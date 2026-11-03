@@ -200,6 +200,31 @@ public class CloudApiClientTests
         Assert.That(deployment.DeploymentId, Is.Empty);
     }
 
+    [Test]
+    public async Task GetLocalDevelopmentValuesAsync_GetsTheValuesWithApiKeyHeader()
+    {
+        _handler.Respond(HttpStatusCode.OK, """{ "values": { "UMBRACO_DEPLOY_API_SECRET": "s3cr3t" } }""");
+
+        IReadOnlyDictionary<string, string> values = await CreateClient().GetLocalDevelopmentValuesAsync(Credentials, CancellationToken.None);
+
+        Assert.That(values, Is.EquivalentTo(new Dictionary<string, string> { ["UMBRACO_DEPLOY_API_SECRET"] = "s3cr3t" }));
+        RecordedRequest request = _handler.Requests.Single();
+        Assert.That(request.Method, Is.EqualTo(HttpMethod.Get));
+        Assert.That(request.Uri.AbsolutePath, Is.EqualTo("/v2/projects/project-1/local-development/values"));
+        Assert.That(request.Headers[CloudApiClient.ApiKeyHeaderName], Is.EqualTo("secret-key"));
+    }
+
+    [Test]
+    public void GetLocalDevelopmentValuesAsync_NotFound_ThrowsCloudApiException()
+    {
+        _handler.Respond(HttpStatusCode.NotFound);
+
+        CloudApiException exception = Assert.ThrowsAsync<CloudApiException>(() => CreateClient().GetLocalDevelopmentValuesAsync(Credentials, CancellationToken.None))!;
+
+        Assert.That(exception.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.That(exception.Message, Does.Contain("local development values"));
+    }
+
     [TestCase(1, 5)]
     [TestCase(2, 10)]
     [TestCase(3, 20)]

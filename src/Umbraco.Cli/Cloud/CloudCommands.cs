@@ -6,7 +6,7 @@ using Umbraco.Cli.Infrastructure;
 namespace Umbraco.Cli.Cloud;
 
 /// <summary>
-/// Defines <c>umbraco cloud deployments upload|deploy|show</c>.
+/// Defines <c>umbraco cloud deployments upload|deploy|show</c> (and adds <c>umbraco cloud init</c> and <c>umbraco cloud secrets</c>).
 /// </summary>
 internal static class CloudCommands
 {
@@ -19,7 +19,7 @@ internal static class CloudCommands
             CreateShowCommand(services),
         };
 
-        return new Command("cloud", "Work with Umbraco Cloud projects.") { Init.CloudInitCommand.Create(services), deployments };
+        return new Command("cloud", "Work with Umbraco Cloud projects.") { Init.CloudInitCommand.Create(services), deployments, Secrets.SecretsCommands.Create(services) };
     }
 
     private static Command CreateUploadCommand(Func<IServiceProvider> services)

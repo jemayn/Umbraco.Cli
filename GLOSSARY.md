@@ -104,3 +104,7 @@ _Avoid_: Baseline key, shared key, restore key
 **CI/CD API key**:
 The Umbraco Cloud credential, scoped to one Cloud project, used to upload Artifacts and start Deployments.
 _Avoid_: ApiKey
+
+**Local development values**:
+The configuration values and secrets of a Cloud project that Umbraco Cloud provides for running it locally, pulled with `umbraco cloud secrets pull` into the repository's gitignored `.env.umbraco`.
+_Avoid_: Local secrets, dev secrets, local config

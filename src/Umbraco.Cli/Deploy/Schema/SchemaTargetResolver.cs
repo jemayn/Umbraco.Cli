@@ -125,7 +125,7 @@ internal static class SchemaTargetResolver
 
         throw new UsageException(
             "No ApiSecret for Umbraco Deploy was specified.",
-            $"Set the {ApiSecretVariable} environment variable, or use --config with the {AppSettingsFileName} or {UmbracoCloudFileName} of the Umbraco project (or the folder containing it).");
+            $"Set the {ApiSecretVariable} environment variable, or use --config with the {AppSettingsFileName} or {UmbracoCloudFileName} of the Umbraco project (or the folder containing it). {LocalEnvironmentFile.PullHint}");
     }
 
     private static JsonDocumentEditor? Load(string path)

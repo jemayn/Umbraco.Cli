@@ -16,4 +16,14 @@ internal interface IGit
     /// Gets the subject of the <c>HEAD</c> commit, or <c>null</c> if it can't be determined (no git, not a repository, no commits).
     /// </summary>
     Task<string?> GetHeadSubjectAsync(string directory, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets the root of the git work tree that contains <paramref name="directory" />, or <c>null</c> if there is none (no git, not a repository).
+    /// </summary>
+    Task<string?> GetRepositoryRootAsync(string directory, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Checks whether git ignores a path (relative to <paramref name="directory" />, which must be in a git work tree).
+    /// </summary>
+    Task<bool> IsIgnoredAsync(string directory, string relativePath, CancellationToken cancellationToken);
 }

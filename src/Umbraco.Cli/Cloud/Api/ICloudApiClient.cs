@@ -25,4 +25,10 @@ internal interface ICloudApiClient
     /// Gets the status of a Deployment, retrying transient failures. When <c>lastModifiedUtc</c> is set, only status messages after this time are returned.
     /// </summary>
     Task<DeploymentResponse> GetDeploymentAsync(CloudCredentials credentials, string deploymentId, DateTimeOffset? lastModifiedUtc, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets the configuration values and secrets of the project for local development (provisional, see ADR 0010).
+    /// </summary>
+    /// <exception cref="CloudApiException">Umbraco Cloud doesn't provide them (yet), or rejected the request.</exception>
+    Task<IReadOnlyDictionary<string, string>> GetLocalDevelopmentValuesAsync(CloudCredentials credentials, CancellationToken cancellationToken);
 }

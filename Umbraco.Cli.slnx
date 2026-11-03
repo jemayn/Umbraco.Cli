@@ -30,6 +30,7 @@
     <File Path="docs/adr/0007-apisecret-per-project-and-baseline-secret-per-connection.md" />
     <File Path="docs/adr/0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md" />
     <File Path="docs/adr/0009-secrets-are-only-read-from-environment-variables.md" />
+    <File Path="docs/adr/0010-local-development-values-are-pulled-from-umbraco-cloud.md" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Umbraco.Cli.Tests/Umbraco.Cli.Tests.csproj" />

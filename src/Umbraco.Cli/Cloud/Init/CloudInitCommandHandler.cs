@@ -1,5 +1,7 @@
 using System.Text;
 using NuGet.Versioning;
+using Umbraco.Cli.Cloud.Api;
+using Umbraco.Cli.Cloud.Secrets;
 using Umbraco.Cli.Deploy.ProjectDetection;
 using Umbraco.Cli.Infrastructure;
 using Umbraco.Cli.Infrastructure.Output;
@@ -20,6 +22,7 @@ internal sealed class CloudInitCommandHandler
     private readonly UmbracoReleases _releases;
     private readonly PackageVersionResolver _versionResolver;
     private readonly UmbracoProjectCreator _creator;
+    private readonly LocalSecretsPuller _secretsPuller;
     private readonly IPrompter _prompter;
     private readonly TimeProvider _timeProvider;
     private readonly IOutput _output;
@@ -31,6 +34,7 @@ internal sealed class CloudInitCommandHandler
         UmbracoReleases releases,
         PackageVersionResolver versionResolver,
         UmbracoProjectCreator creator,
+        LocalSecretsPuller secretsPuller,
         IPrompter prompter,
         TimeProvider timeProvider,
         IOutput output,
@@ -41,6 +45,7 @@ internal sealed class CloudInitCommandHandler
         _releases = releases;
         _versionResolver = versionResolver;
         _creator = creator;
+        _secretsPuller = secretsPuller;
         _prompter = prompter;
         _timeProvider = timeProvider;
         _output = output;
@@ -132,6 +137,7 @@ internal sealed class CloudInitCommandHandler
         }
 
         bool built = await RestoreAndBuildAsync(projectPath, settings.NoBuild, cancellationToken);
+        string secrets = await PullSecretsAsync(repositoryRoot, cancellationToken);
         var result = new CloudInitResult
         {
             Created = create,
@@ -145,6 +151,7 @@ internal sealed class CloudInitCommandHandler
             FilesWritten = filesWritten.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             Identity = identityState,
             Built = built,
+            Secrets = secrets,
         };
 
         _output.Write(result, CliJsonContext.Default.CloudInitResult, _ => FormatText(result));
@@ -183,6 +190,33 @@ internal sealed class CloudInitCommandHandler
         return cmsVersion;
     }
 
+    /// <summary>
+    /// Pulls the local development values from Umbraco Cloud when the project ID and CI/CD API key environment variables are set.
+    /// A failure doesn't fail the init: the project is ready, and the values can be pulled later.
+    /// </summary>
+    /// <returns><c>pulled</c>, <c>failed</c> or <c>not-configured</c>.</returns>
+    private async Task<string> PullSecretsAsync(string repositoryRoot, CancellationToken cancellationToken)
+    {
+        string? projectId = _environment.GetVariable(CloudCredentialsResolver.ProjectIdVariable);
+        string? apiKey = _environment.GetVariable(CloudCredentialsResolver.ApiKeyVariable);
+        if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(apiKey))
+        {
+            return "not-configured";
+        }
+
+        try
+        {
+            _reporter.Info("Pulling the local development values from Umbraco Cloud.");
+            await _secretsPuller.PullAsync(new CloudCredentials(projectId.Trim(), apiKey.Trim()), repositoryRoot, cancellationToken);
+            return "pulled";
+        }
+        catch (Exception exception) when (exception is CliException or HttpRequestException || (exception is OperationCanceledException && cancellationToken.IsCancellationRequested is false))
+        {
+            _reporter.Warning($"Couldn't pull the local development values from Umbraco Cloud: {exception.Message}", "Run 'umbraco cloud secrets pull' to try again.");
+            return "failed";
+        }
+    }
+
     private static string FormatPhase(LifecyclePhase phase) => phase == LifecyclePhase.EndOfLife ? "end-of-life" : phase.ToString().ToLowerInvariant();
 
     private static string FormatText(CloudInitResult result)
@@ -214,23 +248,42 @@ internal sealed class CloudInitCommandHandler
         }
 
         text.AppendLine(result.Built ? "  Restored and built the project." : "  Restored the project.");
+        if (result.Secrets == "pulled")
+        {
+            text.AppendLine($"  Pulled the local development values from Umbraco Cloud into {LocalEnvironmentFile.FileName}.");
+        }
+
         text.AppendLine();
         text.AppendLine("Next steps:");
-        text.AppendLine("  1. Optionally configure the environments to transfer content between with Umbraco Deploy (Umbraco Cloud provisions the ApiSecret):");
+        int step = 1;
+        if (result.Secrets == "not-configured")
+        {
+            text.AppendLine($"  {step++}. Set the {CloudCredentialsResolver.ProjectIdVariable} and {CloudCredentialsResolver.ApiKeyVariable} environment variables to the project's ID and CI/CD API key");
+            text.AppendLine("     (Umbraco Cloud Portal: Configuration > CI/CD Flow), then pull the local development values from Umbraco Cloud:");
+            text.AppendLine("       umbraco cloud secrets pull");
+        }
+        else if (result.Secrets == "failed")
+        {
+            text.AppendLine($"  {step++}. Pull the local development values from Umbraco Cloud:");
+            text.AppendLine("       umbraco cloud secrets pull");
+        }
+
+        text.AppendLine($"  {step++}. Optionally configure the environments to transfer content between with Umbraco Deploy (Umbraco Cloud provisions the ApiSecret):");
         text.AppendLine($"       umbraco deploy init --project \"{result.ProjectPath}\"");
-        text.AppendLine("  2. Run the project locally first, so Umbraco installs and Umbraco Deploy writes the schema to umbraco/Deploy/Revision:");
+        text.AppendLine($"  {step++}. Run the project locally first, so Umbraco installs and Umbraco Deploy writes the schema to umbraco/Deploy/Revision:");
         text.AppendLine($"       dotnet run --project \"{result.ProjectPath}\"");
         if (result.DeploymentType == "git")
         {
-            text.AppendLine("  3. Deploy the source code to Umbraco Cloud (a Git deployment, which needs a git work tree):");
+            text.AppendLine($"  {step}. Deploy the source code to Umbraco Cloud (a Git deployment, which needs a git work tree):");
             text.AppendLine($"       umbraco cloud deployments deploy --path \"{result.RepositoryRoot}\" --environment <alias>");
         }
         else
         {
-            text.AppendLine("  3. Deploy the published output to Umbraco Cloud (an Artifact deployment):");
+            text.AppendLine($"  {step}. Deploy the published output to Umbraco Cloud (an Artifact deployment):");
             text.AppendLine($"       dotnet publish \"{result.ProjectPath}\" --configuration Release --output publish");
             text.AppendLine("       umbraco cloud deployments deploy --path publish --environment <alias>");
         }
+
         return text.ToString().TrimEnd();
     }
 

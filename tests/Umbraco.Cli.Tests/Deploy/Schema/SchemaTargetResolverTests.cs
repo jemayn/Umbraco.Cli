@@ -145,7 +145,7 @@ public class SchemaTargetResolverTests
     {
         UsageException exception = Assert.Throws<UsageException>(() => SchemaTargetResolver.Resolve(new SchemaTargetSettings { Url = "https://example.com" }, _environment))!;
 
-        Assert.That(exception.Hint, Does.Contain(SchemaTargetResolver.ApiSecretVariable).And.Contain("--config").And.Not.Contain("--api-secret"));
+        Assert.That(exception.Hint, Does.Contain(SchemaTargetResolver.ApiSecretVariable).And.Contain("--config").And.Contain("umbraco cloud secrets pull").And.Not.Contain("--api-secret"));
     }
 
     [Test]

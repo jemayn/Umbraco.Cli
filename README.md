@@ -5,6 +5,7 @@ A cross-platform command-line tool for Umbraco products and services in developm
 ```
 umbraco cloud init
 umbraco cloud deployments upload|deploy|show
+umbraco cloud secrets pull
 umbraco deploy init
 umbraco deploy schema deploy|show
 ```
@@ -41,7 +42,23 @@ umbraco cloud init --name MySite --version lts --add forms -- --development-data
 - Options after `--` are passed to `dotnet new umbraco`; the Umbraco.Templates version is installed in the CLI's own template store, so your installed templates don't change.
 - A new `umbraco-cloud.json` gets placeholder Umbraco ID values, so locally the backoffice login works but Umbraco ID login doesn't (Umbraco Cloud environments get their own values through environment variables). The CLI never writes secrets for Umbraco Cloud: Umbraco Cloud provisions them (see [ADR 0008](docs/adr/0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md)). An existing `umbraco-cloud.json` is left unchanged.
 - It restores and builds the project afterwards (`--no-build` to skip the build).
+- When `UMBRACO_CLOUD_PROJECT_ID` and `UMBRACO_CLOUD_API_KEY` are set, it then pulls the local development values from Umbraco Cloud (see below); otherwise its next steps explain how to set them. A failed pull only gives a warning.
 - Then optionally run `umbraco deploy init` to configure the environments to transfer content between, and run the project locally once before publishing it, so Umbraco installs and Umbraco Deploy writes the schema (`umbraco/Deploy/Revision`) that is deployed.
+
+## Local development values
+
+Umbraco Cloud provisions the secrets of a Cloud project; they are pulled down for local development, never generated locally ([ADR 0008](docs/adr/0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md), [ADR 0010](docs/adr/0010-local-development-values-are-pulled-from-umbraco-cloud.md)). Set the project ID and CI/CD API key (Umbraco Cloud Portal: **Configuration > CI/CD Flow**), then pull them:
+
+```sh
+export UMBRACO_CLOUD_PROJECT_ID=<project-id>
+export UMBRACO_CLOUD_API_KEY=<ci-cd-api-key>
+umbraco cloud secrets pull
+```
+
+- The values are written to `.env.umbraco` at the root of the repository, which is added to `.gitignore` if git doesn't ignore it yet, and is never deployed. Only their names are printed.
+- When the CLI runs in the repository, it reads environment variables it needs from `.env.umbraco` too; variables set in the environment take precedence (as in CI/CD pipelines).
+- When a command needs a value that can be pulled, its error says so. Run the command again to update the values.
+- The Umbraco Cloud endpoint for these values isn't available yet, so `umbraco cloud secrets pull` currently fails with a 404.
 
 ## Umbraco Cloud deployments
 

@@ -17,6 +17,11 @@ internal sealed class CloudApiClient : ICloudApiClient
     public const string DefaultBaseAddress = "https://api.cloud.umbraco.com/";
 
     /// <summary>
+    /// The path (relative to the project) of the local development values: provisional, as the endpoint isn't available yet (see ADR 0010).
+    /// </summary>
+    public const string LocalDevelopmentValuesPath = "local-development/values";
+
+    /// <summary>
     /// Gets the base address of the API: the default, or an override that must use HTTPS (HTTP only for localhost), because every request carries the API key.
     /// </summary>
     public static Uri GetBaseAddress(string? overrideUrl, string variable)
@@ -165,6 +170,24 @@ internal sealed class CloudApiClient : ICloudApiClient
             _reporter.Verbose($"Getting the deployment status failed ({failure}), retrying in {delay.TotalSeconds:0} seconds (attempt {attempt} of {MaxPollAttempts}).");
             await Task.Delay(delay, _timeProvider, cancellationToken);
         }
+    }
+
+    public async Task<IReadOnlyDictionary<string, string>> GetLocalDevelopmentValuesAsync(CloudCredentials credentials, CancellationToken cancellationToken)
+    {
+        using HttpRequestMessage request = CreateRequest(HttpMethod.Get, credentials, LocalDevelopmentValuesPath);
+        using CancellationTokenSource timeout = CreateTimeout(cancellationToken);
+        using HttpResponseMessage response = await _httpClient.SendAsync(request, timeout.Token);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            _reporter.Verbose($"{request.Method} {request.RequestUri} responded 404 Not Found");
+            throw new CloudApiException(
+                response.StatusCode,
+                "Umbraco Cloud doesn't provide the local development values for this project (404 Not Found).",
+                "Check the project ID; the endpoint for local development values may not be available yet.");
+        }
+
+        LocalDevelopmentValuesResponse values = await ReadAsync(response, CloudJsonContext.Default.LocalDevelopmentValuesResponse, cancellationToken);
+        return values.Values;
     }
 
     /// <summary>

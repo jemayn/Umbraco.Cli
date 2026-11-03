@@ -38,4 +38,10 @@ internal sealed record CloudInitResult
     public required string Identity { get; init; }
 
     public required bool Built { get; init; }
+
+    /// <summary>
+    /// Gets whether the local development values were pulled from Umbraco Cloud: <c>pulled</c>, <c>failed</c>, or <c>not-configured</c>
+    /// (the project ID or CI/CD API key environment variable isn't set).
+    /// </summary>
+    public required string Secrets { get; init; }
 }

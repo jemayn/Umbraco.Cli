@@ -44,4 +44,31 @@ internal sealed class Git : IGit
             return null;
         }
     }
+
+    public async Task<string?> GetRepositoryRootAsync(string directory, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ProcessResult result = await _processRunner.RunAsync("git", ["rev-parse", "--show-toplevel"], directory, cancellationToken);
+            string root = result.StandardOutput.Trim();
+            return result.ExitCode == 0 && root.Length > 0 ? Path.GetFullPath(root) : null;
+        }
+        catch (CliException)
+        {
+            // git is not installed
+            return null;
+        }
+    }
+
+    public async Task<bool> IsIgnoredAsync(string directory, string relativePath, CancellationToken cancellationToken)
+    {
+        // Exit code 0: ignored, 1: not ignored, anything else: an error
+        ProcessResult result = await _processRunner.RunAsync("git", ["check-ignore", "--quiet", "--", relativePath], directory, cancellationToken);
+        return result.ExitCode switch
+        {
+            0 => true,
+            1 => false,
+            _ => throw new CliException($"Could not check whether git ignores '{relativePath}': {result.StandardError.Trim()}"),
+        };
+    }
 }
