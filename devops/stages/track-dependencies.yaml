@@ -1,0 +1,85 @@
+parameters:
+  - name: ProjectName
+    type: string
+  - name: ProjectFile
+    type: string
+  - name: DependsOn
+    type: object
+    default: []
+  - name: SbomConfigurationVariableGroupPrefix
+    type: string
+  - name: EnvironmentName
+    type: string
+    default: live
+
+stages:
+  - stage: TrackDependencies
+    displayName: 🔗 Track Dependencies
+    dependsOn: ${{ parameters.DependsOn }}
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    variables:
+      - group: "${{ parameters.SbomConfigurationVariableGroupPrefix }}-${{ parameters.EnvironmentName }}"
+
+    jobs:
+      - job: GenerateSbom
+        pool:
+          vmImage: 'ubuntu-latest'
+        displayName: Generate SBOM
+        continueOnError: true
+
+        steps:
+          - task: UseDotNet@2
+            displayName: 'Install version .NET from global.json'
+            inputs:
+              useGlobalJson: true
+
+          - script: dotnet tool install -g CycloneDX --ignore-failed-sources
+            displayName: 'Install CycloneDX .NET Tool'
+
+          # The SBOM of the tool's project: the test projects aren't shipped
+          - script: dotnet restore ${{ parameters.ProjectFile }}
+            displayName: Restore
+
+          - script: dotnet CycloneDX ${{ parameters.ProjectFile }} --enable-github-licenses --disable-package-restore --github-bearer-token $(GITHUB_TOKEN) --spec-version 1.5
+            displayName: 'Generate NuGet SBOM'
+
+          - publish: bom.xml
+            artifact: SBOM-NUGET
+            displayName: 'Publish NuGet SBOM Artifact'
+
+          - task: Bash@3
+            displayName: 'Upload SBOM to Dependency-Track'
+            inputs:
+              targetType: 'inline'
+              script: |
+                for sbom in ./*.xml; do
+                  echo "→ Uploading $sbom as project: ${{ parameters.ProjectName }}"
+
+                  # Base64 encode and save in a file
+                  b64file=$(mktemp)
+                  base64 -w0 "$sbom" > "$b64file"
+
+                  # Create payload with jq using --rawfile to avoid too long arguments
+                  payloadfile=$(mktemp)
+                  jq -n --rawfile bom "$b64file" \
+                  --arg projectName "${{ parameters.ProjectName }}" \
+                  --arg projectVersion "main" \
+                  '{
+                      projectName: $projectName,
+                      projectVersion: $projectVersion,
+                      autoCreate: true,
+                      bom: $bom
+                    }' > "$payloadfile"
+
+                  # delete the temp file
+                  rm "$b64file"
+
+                  curl -X PUT "$(SBOM_API_URL)" \
+                    -H "X-Api-Key: $(SBOM_API_KEY)" \
+                    -H "Content-Type: application/json" \
+                    -d @"$payloadfile"
+
+                  rm "$payloadfile"
+
+                  echo "✔ uploaded $(basename "$sbom")"
+                done

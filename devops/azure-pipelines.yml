@@ -1,0 +1,194 @@
+trigger:
+  branches:
+    include:
+      - develop
+      - v*/dev
+      - release/*
+      - main
+      - v*/main
+  tags:
+    include:
+      - release-*
+
+pr:
+  branches:
+    include:
+      - develop
+      - v*/dev
+      - release/*
+
+variables:
+  # Build
+  - name: buildConfiguration
+    value: Release
+
+  # Deployment: Pre-release
+  - name: PrereleaseEnvironmentName
+    value: NuGet - Pre-release
+
+  # Deployment: Release
+  - name: ReleaseEnvironmentName
+    value: NuGet - Release
+
+  # Global variables
+  - name: DOTNET_NOLOGO
+    value: true
+  - name: DOTNET_GENERATE_ASPNET_CERTIFICATE
+    value: false
+  - name: DOTNET_SKIP_FIRST_TIME_EXPERIENCE
+    value: true
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: true
+
+  # Access to NuGet feeds (MyGet_Prereleases_FeedUri and MyGet_Prereleases_ApiKey)
+  - group: ArtifactFeeds
+
+  # Dependency tracking
+  - name: ProjectName
+    value: Umbraco.Cli
+  - name: ProjectFile
+    value: src/Umbraco.Cli/Umbraco.Cli.csproj
+
+stages:
+  - stage: Build
+    jobs:
+      - job: Build
+        displayName: Build, Test and Pack
+        # The CLI runs on developer machines as well as in pipelines, so it's tested on Linux and Windows
+        strategy:
+          matrix:
+            Linux:
+              vmImage: ubuntu-latest
+            Windows:
+              vmImage: windows-latest
+        pool:
+          vmImage: $(vmImage)
+        steps:
+          # Checkout source (avoid shallow clone to calculate version height)
+          - checkout: self
+            fetchDepth: 0
+
+          # Setup build environment
+          - task: UseDotNet@2
+            displayName: Use .NET SDK version from global.json
+            inputs:
+              useGlobalJson: true
+
+          # Build
+          - script: dotnet build --configuration $(buildConfiguration) -warnaserror -p:ContinuousIntegrationBuild=true
+            displayName: Run dotnet build
+
+          # Test (the Umbraco Cloud smoke tests need a real Cloud project)
+          - script: dotnet test --configuration $(buildConfiguration) --no-build --filter "TestCategory!=Smoke" --report-trx --results-directory $(Build.ArtifactStagingDirectory)/tests
+            displayName: Run dotnet test
+
+          - task: PublishTestResults@2
+            displayName: Publish test results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: VSTest
+              testResultsFiles: '*.trx'
+              searchFolder: $(Build.ArtifactStagingDirectory)/tests
+              testRunTitle: Unit Tests - $(Agent.OS)
+              configuration: $(buildConfiguration)
+
+          # The tool must stay trimming and AOT compatible
+          - script: dotnet publish $(ProjectFile) --configuration $(buildConfiguration) --runtime linux-x64 --self-contained -p:PublishTrimmed=true -p:PackAsTool=false -warnaserror --output $(Agent.TempDirectory)/trimmed
+            displayName: Check trimming and AOT compatibility
+            condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+
+          # A release tag must give a public release with the same version (Nerdbank.GitVersioning sets the NBGV_* variables during the build)
+          - script: |
+              tag="${BUILD_SOURCEBRANCH#refs/tags/}"
+              if ! printf '%s' "$tag" | grep -qE '^release-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+                echo "##vso[task.logissue type=error]$tag is not a release tag of the form 'release-<major>.<minor>.<patch>[-<prerelease>]'."
+                exit 1
+              fi
+              if [ "$NBGV_PUBLICRELEASE" != "True" ]; then
+                echo "##vso[task.logissue type=error]Nerdbank.GitVersioning doesn't consider $tag a public release."
+                exit 1
+              fi
+              if [ "release-$NBGV_NUGETPACKAGEVERSION" != "$tag" ]; then
+                echo "##vso[task.logissue type=error]The package version $NBGV_NUGETPACKAGEVERSION doesn't match the tag $tag."
+                exit 1
+              fi
+            displayName: Check release version
+            condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'), startsWith(variables['Build.SourceBranch'], 'refs/tags/release-'))
+
+          # Pack
+          - script: dotnet pack $(ProjectFile) --configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory)/nupkg
+            displayName: Run dotnet pack
+            condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+
+          # Publish
+          - publish: $(Build.ArtifactStagingDirectory)/nupkg
+            displayName: Publish NuGet packages
+            artifact: nupkg
+            condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+
+  - stage: Prerelease
+    displayName: Pre-release
+    dependsOn:
+      - Build
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - deployment:
+        displayName: Push to pre-release NuGet feed
+        pool:
+          vmImage: ubuntu-latest
+        environment: $(PrereleaseEnvironmentName)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Download
+                - download: current
+                  displayName: Download NuGet packages
+                  artifact: nupkg
+
+                # Push
+                - script: |
+                    set -euo pipefail
+                    dotnet nuget add source "$MYGET_FEED_URI" --name Feed --username name --password "$MYGET_API_KEY" --store-password-in-clear-text
+                    dotnet nuget push "$(Pipeline.Workspace)/nupkg/*.nupkg" --source Feed --api-key "$MYGET_API_KEY" --skip-duplicate
+                  displayName: Release to MyGet
+                  env:
+                    MYGET_FEED_URI: $(MyGet_Prereleases_FeedUri)
+                    MYGET_API_KEY: $(MyGet_Prereleases_ApiKey)
+
+  - stage: Release
+    dependsOn: Prerelease
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/release-'))
+    jobs:
+      - deployment:
+        displayName: Push to release NuGet feed
+        pool:
+          vmImage: ubuntu-latest
+        # Requires an approval before pushing to NuGet
+        environment: $(ReleaseEnvironmentName)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Download
+                - download: current
+                  displayName: Download NuGet packages
+                  artifact: nupkg
+
+                # Push
+                - script: dotnet nuget push "$(Pipeline.Workspace)/nupkg/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
+                  displayName: Release to NuGet
+                  env:
+                    # A secret pipeline variable, with a NuGet API key scoped to the Umbraco.Cli package
+                    NUGET_API_KEY: $(Nuget_UmbracoCli_ApiKey)
+
+  # Stage: Track dependencies with Software Bill of Materials
+  - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/release-') }}:
+      - template: stages/track-dependencies.yaml
+        parameters:
+          ProjectName: "${{ variables.ProjectName }}"
+          ProjectFile: "${{ variables.ProjectFile }}"
+          DependsOn:
+            - Release
+          SbomConfigurationVariableGroupPrefix: "sbom-configuration"
+          EnvironmentName: "live" # use 'dev' for experimenting with the tool
