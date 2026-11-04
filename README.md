@@ -104,6 +104,8 @@ umbraco cloud deployments show --wait
   ```
 - Other options: `--no-build-and-restore`, `--skip-version-check`, `--skip-preserve-umbraco-cloud-json`, `--no-schema-extraction`, `--timeout <duration>` (default `15m`).
 
+For complete pipelines, see the [CI/CD pipeline examples](docs/examples/README.md).
+
 ## Umbraco Deploy configuration
 
 `umbraco deploy init` adds the environments of a site and, for Umbraco Deploy On-Premises, ensures an ApiSecret is configured. Run it in the site's project directory (or use `--project`):
