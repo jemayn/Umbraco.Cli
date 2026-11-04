@@ -4,6 +4,7 @@ using Umbraco.Cli.Cloud;
 using Umbraco.Cli.Cloud.Api;
 using Umbraco.Cli.Cloud.Artifacts;
 using Umbraco.Cli.Cloud.Init;
+using Umbraco.Cli.Cloud.Secrets;
 using Umbraco.Cli.Deploy;
 using Umbraco.Cli.Deploy.Configuration;
 using Umbraco.Cli.Deploy.ProjectDetection;
@@ -25,6 +26,8 @@ internal static class ServiceRegistration
 
     public static void AddCliServices(IServiceCollection services, GlobalSettings settings, IEnvironment environment, TextWriter stdout, TextWriter stderr)
     {
+        // Environment variables fall back to the values pulled from Umbraco Cloud into the repository's .env.umbraco
+        environment = new LocalFileEnvironment(environment);
         services.AddSingleton(settings);
         services.AddSingleton(environment);
         services.AddSingleton(TimeProvider.System);
@@ -49,7 +52,7 @@ internal static class ServiceRegistration
         // Umbraco Cloud
         services.AddHttpClient<ICloudApiClient, CloudApiClient>(client =>
         {
-            client.BaseAddress = new Uri(environment.GetVariable(ApiUrlVariable) is { Length: > 0 } url ? url.TrimEnd('/') + "/" : CloudApiClient.DefaultBaseAddress);
+            client.BaseAddress = CloudApiClient.GetBaseAddress(environment.GetVariable(ApiUrlVariable), ApiUrlVariable);
             client.Timeout = Timeout.InfiniteTimeSpan;
         });
         services.AddSingleton<ArtifactZipBuilder>();
@@ -69,7 +72,11 @@ internal static class ServiceRegistration
         services.AddTransient<UmbracoProjectCreator>();
         services.AddTransient<CloudInitCommandHandler>();
 
-        // Umbraco Deploy
+        // umbraco cloud secrets
+        services.AddTransient<LocalSecretsPuller>();
+        services.AddTransient<SecretsPullCommandHandler>();
+
+        // Umbraco Deploy (secrets are only generated for Umbraco Deploy On-Premises; Umbraco Cloud provisions its own)
         services.AddSingleton<Func<string>>(ApiSecret.Generate);
         services.AddSingleton<Func<Guid>>(Guid.NewGuid);
         services.AddSingleton<IDeployConfigurationWriter, OnPremisesConfigurationWriter>();

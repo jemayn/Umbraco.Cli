@@ -10,7 +10,7 @@ namespace Umbraco.Cli.Deploy.Schema;
 /// Resolves the Environment and credentials of a schema deployment from options, environment variables and the Umbraco project's configuration files.
 /// </summary>
 /// <remarks>
-/// The credentials come from the first source that has an ApiKey or ApiSecret: the options, the environment variables, <c>umbraco-cloud.json</c>
+/// The credentials come from the first source that has an ApiKey or ApiSecret: the environment variables (secrets are never options, see ADR 0009), <c>umbraco-cloud.json</c>
 /// (<c>Deploy:Settings</c>) and <c>appsettings.json</c> (<c>Umbraco:Deploy:Settings</c>). Within a source the obsolete ApiKey wins, as it does in Umbraco Deploy.
 /// An Environment name is looked up in the <c>Workspaces</c> of <c>umbraco-cloud.json</c>, then of <c>appsettings.json</c>. A single file can be given
 /// instead of a folder: <c>umbraco-cloud.json</c>, or any other file as app settings (such as <c>appsettings.Production.json</c>).
@@ -53,7 +53,7 @@ internal static class SchemaTargetResolver
             throw new UsageException($"'{config}' doesn't exist.", ConfigHint);
         }
 
-        return new SchemaTarget(ResolveUrl(settings, cloud, appSettings, config), settings.Url is null ? settings.Environment : null, ResolveCredentials(settings, environment, cloud, appSettings));
+        return new SchemaTarget(ResolveUrl(settings, cloud, appSettings, config), settings.Url is null ? settings.Environment : null, ResolveCredentials(environment, cloud, appSettings));
     }
 
     private static Uri ResolveUrl(SchemaTargetSettings settings, JsonDocumentEditor? cloud, JsonDocumentEditor? appSettings, string config)
@@ -94,11 +94,10 @@ internal static class SchemaTargetResolver
         return new Uri(url.TrimEnd('/') + "/");
     }
 
-    private static DeployCredentials ResolveCredentials(SchemaTargetSettings settings, IEnvironment environment, JsonDocumentEditor? cloud, JsonDocumentEditor? appSettings)
+    private static DeployCredentials ResolveCredentials(IEnvironment environment, JsonDocumentEditor? cloud, JsonDocumentEditor? appSettings)
     {
         (string Source, string? ApiKey, string? ApiSecret)[] sources =
         [
-            (settings.ApiKey is null ? "--api-secret" : "--api-key", settings.ApiKey, settings.ApiSecret),
             (environment.GetVariable(ApiKeyVariable) is { Length: > 0 } ? ApiKeyVariable : ApiSecretVariable, environment.GetVariable(ApiKeyVariable), environment.GetVariable(ApiSecretVariable)),
             (UmbracoCloudFileName, cloud?.GetString([.. CloudSettings, "ApiKey"]), cloud?.GetString([.. CloudSettings, "ApiSecret"])),
             (AppSettingsFileName, appSettings?.GetString([.. AppSettingsSettings, "ApiKey"]), appSettings?.GetString([.. AppSettingsSettings, "ApiSecret"])),
@@ -126,7 +125,7 @@ internal static class SchemaTargetResolver
 
         throw new UsageException(
             "No ApiSecret for Umbraco Deploy was specified.",
-            $"Use --api-secret, set the {ApiSecretVariable} environment variable, or use --config with the {AppSettingsFileName} or {UmbracoCloudFileName} of the Umbraco project (or the folder containing it).");
+            $"Set the {ApiSecretVariable} environment variable, or use --config with the {AppSettingsFileName} or {UmbracoCloudFileName} of the Umbraco project (or the folder containing it). {LocalEnvironmentFile.PullHint}");
     }
 
     private static JsonDocumentEditor? Load(string path)

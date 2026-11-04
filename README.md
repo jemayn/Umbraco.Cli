@@ -5,6 +5,7 @@ A cross-platform command-line tool for Umbraco products and services in developm
 ```
 umbraco cloud init
 umbraco cloud deployments upload|deploy|show
+umbraco cloud secrets pull
 umbraco deploy init
 umbraco deploy schema deploy|show
 ```
@@ -39,18 +40,34 @@ umbraco cloud init --name MySite --version lts --add forms -- --development-data
 - `--version`: `latest` (default), `lts`, `rc`, `beta`, `next`, a major (`17`), a major.minor (`17.2`) or an exact version. It warns about versions that only receive security fixes and refuses end-of-life versions (unless `--allow-end-of-life`).
 - `--add <product>`: add a Product (currently `forms`, which also adds `Umbraco.Forms.Deploy`). Packages that are already referenced are never changed.
 - Options after `--` are passed to `dotnet new umbraco`; the Umbraco.Templates version is installed in the CLI's own template store, so your installed templates don't change.
-- `umbraco-cloud.json` gets placeholder Umbraco ID values. They're only used for local login (Umbraco Cloud environments get their own values through environment variables), so locally the backoffice login works, but Umbraco ID login needs the real local-login values from a cloned Cloud project's `umbraco-cloud.json`. Use `--identity-client-id`/`--identity-client-secret` (or `UMBRACO_CLOUD_IDENTITY_CLIENT_ID`/`UMBRACO_CLOUD_IDENTITY_CLIENT_SECRET`) to provide real values.
+- A new `umbraco-cloud.json` gets placeholder Umbraco ID values, so locally the backoffice login works but Umbraco ID login doesn't (Umbraco Cloud environments get their own values through environment variables). The CLI never writes secrets for Umbraco Cloud: Umbraco Cloud provisions them (see [ADR 0008](docs/adr/0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md)). An existing `umbraco-cloud.json` is left unchanged.
 - It restores and builds the project afterwards (`--no-build` to skip the build).
-- Then run `umbraco deploy init` (the ApiSecret for Umbraco Deploy) and run the project locally once before publishing it, so Umbraco installs and Umbraco Deploy writes the schema (`umbraco/Deploy/Revision`) that is deployed.
+- When `UMBRACO_CLOUD_PROJECT_ID` and `UMBRACO_CLOUD_API_KEY` are set, it then pulls the local development values from Umbraco Cloud (see below); otherwise its next steps explain how to set them. A failed pull only gives a warning.
+- Then optionally run `umbraco deploy init` to configure the environments to transfer content between, and run the project locally once before publishing it, so Umbraco installs and Umbraco Deploy writes the schema (`umbraco/Deploy/Revision`) that is deployed.
+
+## Local development values
+
+Umbraco Cloud provisions the secrets of a Cloud project; they are pulled down for local development, never generated locally ([ADR 0008](docs/adr/0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md), [ADR 0010](docs/adr/0010-local-development-values-are-pulled-from-umbraco-cloud.md)). Set the project ID and CI/CD API key (Umbraco Cloud Portal: **Configuration > CI/CD Flow**), then pull them:
+
+```sh
+export UMBRACO_CLOUD_PROJECT_ID=<project-id>
+export UMBRACO_CLOUD_API_KEY=<ci-cd-api-key>
+umbraco cloud secrets pull
+```
+
+- The values are written to `.env.umbraco` at the root of the repository, which is added to `.gitignore` if git doesn't ignore it yet, and is never deployed. Only their names are printed.
+- When the CLI runs in the repository, it reads environment variables it needs from `.env.umbraco` too; variables set in the environment take precedence (as in CI/CD pipelines).
+- When a command needs a value that can be pulled, its error says so. Run the command again to update the values.
+- The Umbraco Cloud endpoint for these values isn't available yet, so `umbraco cloud secrets pull` currently fails with a 404.
 
 ## Umbraco Cloud deployments
 
-These commands use the [Umbraco Cloud CI/CD API](https://docs.umbraco.com/umbraco-cloud/build-and-customize-your-solution/handle-deployments-and-environments/umbraco-cicd/umbraco-cloud-api). Get the project ID and CI/CD API key from the Umbraco Cloud Portal (**Configuration > CI/CD Flow**) and pass them as options or environment variables (they are never stored):
+These commands use the [Umbraco Cloud CI/CD API](https://docs.umbraco.com/umbraco-cloud/build-and-customize-your-solution/handle-deployments-and-environments/umbraco-cicd/umbraco-cloud-api). Get the project ID and CI/CD API key from the Umbraco Cloud Portal (**Configuration > CI/CD Flow**). The API key is a secret, so it's only read from the `UMBRACO_CLOUD_API_KEY` environment variable (in a pipeline, from its secret store), never from an option, and it's never stored or printed:
 
 | Option | Environment variable |
 |---|---|
 | `--project-id` | `UMBRACO_CLOUD_PROJECT_ID` |
-| `--api-key` | `UMBRACO_CLOUD_API_KEY` |
+| | `UMBRACO_CLOUD_API_KEY` |
 
 When neither gives the project ID, it's read from `Deploy:Project:Id` in `umbraco-cloud.json` (`umbraco deploy init --project-id` sets it): `--config` points at the file or a folder containing it, and defaults to the uploaded `--path` (at its root for published output, or in the Umbraco project that its `.umbraco` file points at for source code). For example, to deploy an uploaded artifact: `umbraco cloud deployments deploy --artifact-id <id> --environment live --config publish`.
 
@@ -69,6 +86,7 @@ umbraco cloud deployments show <deployment-id> --wait
 ```
 
 - `--path` zips a directory. The deployment type is detected like Umbraco Cloud does: `Umbraco.Core.dll` at the root means published output (all files are included), a project or solution file means source code (the files git would commit are included, so `.gitignore` is honoured). Use `--type git|artifact` to override.
+- Some files are never deployed, also when git would commit them: environment files (`.env`, `.env.*`), local SQLite databases (`*.sqlite.db`), and Umbraco's logs and temporary files (`umbraco/Logs`, `umbraco/Data/TEMP`). The files left out are listed.
 - A Git deployment needs the `.umbraco` file of your Umbraco Cloud repository at its root, unless you deploy with `--skip-preserve-umbraco-cloud-json`.
 - Artifacts can be at most 256 MiB.
 - The commit message defaults to the subject of the current git `HEAD` commit; use `--message` to set it.
@@ -82,7 +100,7 @@ umbraco cloud deployments show <deployment-id> --wait
 
 ## Umbraco Deploy configuration
 
-`umbraco deploy init` ensures an ApiSecret is configured and adds the environments of a site. Run it in the site's project directory (or use `--project`):
+`umbraco deploy init` adds the environments of a site and, for Umbraco Deploy On-Premises, ensures an ApiSecret is configured. Run it in the site's project directory (or use `--project`):
 
 ```sh
 umbraco deploy init \
@@ -92,15 +110,15 @@ umbraco deploy init \
 ```
 
 - **Umbraco Deploy On-Premises** (`Umbraco.Deploy.OnPrem`): writes `Umbraco:Deploy:Settings:ApiSecret` and `Umbraco:Deploy:Project` in `appsettings.json`.
-- **Umbraco Deploy Cloud** (`Umbraco.Deploy.Cloud`): writes `Deploy:Settings:ApiSecret` and `Deploy:Project:Workspaces` in `umbraco-cloud.json`. No ApiSecret is written while an ApiKey is configured, because Umbraco Cloud git-based projects still use it. Use `--project-id` to set the project ID when it isn't configured yet.
+- **Umbraco Deploy Cloud** (`Umbraco.Deploy.Cloud`): writes `Deploy:Project:Workspaces` in `umbraco-cloud.json`, and never an ApiSecret or ApiKey: Umbraco Cloud provisions them (see [ADR 0008](docs/adr/0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md)). Use `--project-id` to set the project ID when it isn't configured yet.
 
-The package is detected with `dotnet package list`. A valid existing ApiSecret is kept (use `--rotate-secret` to replace it) and a newly generated one is printed: every environment must be configured with the same value. `--environment` replaces the configured list, keeping the IDs of environments with the same name. Comments and formatting of the settings file are preserved. Use `--dry-run` to see the changes without writing them.
+The package is detected with `dotnet package list`. On-Premises, a valid existing ApiSecret is kept (use `--rotate-secret` to replace it) and a newly generated one is written to `appsettings.json`: every environment must be configured with the same value. Generated secrets are never printed (also not with `-o json`), so they can't end up in CI/CD logs; read them from the settings file. `--environment` replaces the configured list, keeping the IDs of environments with the same name. Comments and formatting of the settings file are preserved. Use `--dry-run` to see the changes without writing them.
 
 ### Baseline connections
 
 A Child project restores content from its Baseline project with a Baseline secret of its own, separate from the ApiSecret of either project. On Umbraco Deploy On-Premises, `deploy init` configures both sides of a Baseline connection; Umbraco Cloud provisions these settings itself, so for Umbraco Deploy Cloud the options are refused and `deploy init` only reports what is configured (`Deploy:Settings:BaselineUrl` or the obsolete `Deploy:Project:Upstream`, `BaselineApiSecret` and the number of `ChildApiSecrets`).
 
-On the Baseline project (its Live environment), generate a secret for a Child project and note the printed value:
+On the Baseline project (its Live environment), generate a secret for a Child project (it's written to `ChildApiSecrets:<name>` in `appsettings.json`, not printed):
 
 ```sh
 umbraco deploy init --child-secret customer-a
@@ -115,13 +133,13 @@ UMBRACO_DEPLOY_BASELINE_SECRET="<the child secret>" umbraco deploy init --baseli
 | Option | Applies to | Meaning |
 |---|---|---|
 | `--baseline-url <url>` | Child project | Sets `BaselineUrl`, the absolute HTTPS URL of the Baseline project's Live environment (HTTP only for localhost, and without a user name or password) |
-| `--baseline-secret <base64>` (`UMBRACO_DEPLOY_BASELINE_SECRET`) | Child project | Sets `BaselineApiSecret` (Base64, at least 64 bytes). The environment variable is only used with `--baseline-url` or a configured `BaselineUrl` (On-Premises) |
-| `--rotate-baseline-secret` | Child project | Generates a new `BaselineApiSecret` and prints it, to be added to `ChildApiSecrets` on the Baseline project |
+| `UMBRACO_DEPLOY_BASELINE_SECRET` (environment variable) | Child project | Sets `BaselineApiSecret` (Base64, at least 64 bytes). Only used with `--baseline-url` or a configured `BaselineUrl` (On-Premises) |
+| `--rotate-baseline-secret` | Child project | Generates a new `BaselineApiSecret`, to be added to `ChildApiSecrets` on the Baseline project |
 | `--remove-baseline` | Child project | Removes `BaselineUrl` and `BaselineApiSecret` (cannot be combined with the other Child project options) |
-| `--child-secret <name>` | Baseline project | Generates `ChildApiSecrets:<name>` and prints it, to be set as `BaselineApiSecret` on the Child project. A valid existing entry is kept |
+| `--child-secret <name>` | Baseline project | Generates `ChildApiSecrets:<name>`, to be set as `BaselineApiSecret` on the Child project. A valid existing entry is kept |
 | `--remove-child-secret <name>` | Baseline project | Removes that `ChildApiSecrets` entry |
 
-- A secret is never generated without `--rotate-baseline-secret` or `--child-secret`, and a newly generated one is printed once (masked in a dry run).
+- A secret is never generated without `--rotate-baseline-secret` or `--child-secret`, and a newly generated one is only written to `appsettings.json`, never printed.
 - `--child-secret` stores the secret in the Baseline project's `appsettings.json`, so don't commit that file to a repository that Child projects are created from: set the secret as the environment variable `Umbraco__Deploy__Settings__ChildApiSecrets__<name>` on the Baseline project's Live environment instead (`deploy init` warns about this).
 - To rotate a child secret without downtime, add `<name>-1` with `--child-secret`, set it on the Child project, then remove `<name>` with `--remove-child-secret`.
 - A Baseline secret without a `BaselineUrl` only gets a warning: it is only used for calls to the Baseline project.
@@ -136,10 +154,10 @@ UMBRACO_DEPLOY_BASELINE_SECRET="<the child secret>" umbraco deploy init --baseli
 umbraco deploy schema deploy --config publish --environment Live
 ```
 
-Or give the URL and ApiSecret directly (or as `UMBRACO_DEPLOY_API_SECRET`):
+Or give the URL directly, with the ApiSecret in the `UMBRACO_DEPLOY_API_SECRET` environment variable (secrets are never options):
 
 ```sh
-umbraco deploy schema deploy --url https://www.example.com --api-secret "$DEPLOY_API_SECRET" --reason "Release 42"
+UMBRACO_DEPLOY_API_SECRET="$DEPLOY_API_SECRET" umbraco deploy schema deploy --url https://www.example.com --reason "Release 42"
 umbraco deploy schema show --url https://www.example.com --wait   # the current schema deployment
 ```
 
@@ -148,8 +166,8 @@ umbraco deploy schema show --url https://www.example.com --wait   # the current 
 | `--environment`, `-e` | | The Environment's name in the Umbraco Deploy configuration (`Workspaces`) in `--config` |
 | `--url` | | The Environment's URL, instead of `--environment` |
 | `--config` | | The `appsettings.json` or `umbraco-cloud.json`, or the folder containing them (default: the current directory) |
-| `--api-secret` | `UMBRACO_DEPLOY_API_SECRET` | The ApiSecret (default: the one in `--config`) |
-| `--api-key` | `UMBRACO_DEPLOY_API_KEY` | The obsolete ApiKey, instead of an ApiSecret |
+| | `UMBRACO_DEPLOY_API_SECRET` | The ApiSecret (default: the one in `--config`) |
+| | `UMBRACO_DEPLOY_API_KEY` | The obsolete ApiKey, instead of an ApiSecret |
 
 - The requests are signed with the ApiSecret, so it must be the one the Environment uses, and the clocks of both machines must agree within 20 minutes.
 - Umbraco Deploy only keeps the status in memory: when it stays unknown for a minute (the site restarted, or another Umbraco Deploy operation was running), the schema deployment is started once more.
@@ -171,6 +189,8 @@ Results are written to stdout (`-o text`, the default, or `-o json`); progress a
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report issues and contribute.
+
 ```sh
 dotnet build
 dotnet test --filter "TestCategory!=Integration&TestCategory!=Smoke"   # unit tests
@@ -178,4 +198,4 @@ dotnet test --filter "TestCategory=Integration"                        # runs re
 dotnet run --project src/Umbraco.Cli -- --help
 ```
 
-Commands for a product or service go in a top-level command group named after it (such as `cloud` or `deploy`), with the same name as a tag in `PackageTags` (`Directory.Build.props`); a test checks this. The Umbraco Cloud smoke tests (`TestCategory=Smoke`) only run when `UMBRACO_CLOUD_PROJECT_ID` and `UMBRACO_CLOUD_API_KEY` are set. See [GLOSSARY.md](GLOSSARY.md) for the domain language, [docs/adr](docs/adr) for architecture decisions and [docs/superpowers/specs](docs/superpowers/specs) for the design.
+Commands for a product or service go in a top-level command group named after it (such as `cloud` or `deploy`), with the same name as a tag in `PackageTags` (`Directory.Build.props`); a test checks this. The Umbraco Cloud smoke tests (`TestCategory=Smoke`) only run when `UMBRACO_CLOUD_PROJECT_ID` and `UMBRACO_CLOUD_API_KEY` are set. See [GLOSSARY.md](GLOSSARY.md) for the domain language and [docs/adr](docs/adr) for architecture decisions.

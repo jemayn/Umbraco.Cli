@@ -1,0 +1,26 @@
+# Categories for the automatically generated release notes of GitHub Releases
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+      - state/duplicate
+      - state/wontfix
+  categories:
+    - title: 💥 Breaking changes
+      labels:
+        - category/breaking
+    - title: 🚀 New features
+      labels:
+        - type/feature
+    - title: ✨ Improvements
+      labels:
+        - type/improvement
+    - title: 🐛 Bug fixes
+      labels:
+        - type/bug
+    - title: 📦 Dependencies
+      labels:
+        - dependencies
+    - title: Other changes
+      labels:
+        - "*"

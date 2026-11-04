@@ -10,11 +10,6 @@ internal static class ApiSecret
     public const int MinimumLength = 64;
 
     /// <summary>
-    /// Replaces a secret in output that must not reveal it (such as a dry run).
-    /// </summary>
-    public const string Masked = "********";
-
-    /// <summary>
     /// Generates 64 random bytes, Base64-encoded (88 characters).
     /// </summary>
     public static string Generate() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(MinimumLength));

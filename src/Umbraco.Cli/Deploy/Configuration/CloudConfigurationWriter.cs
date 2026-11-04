@@ -7,21 +7,16 @@ namespace Umbraco.Cli.Deploy.Configuration;
 /// Configures Umbraco Deploy Cloud in <c>umbraco-cloud.json</c> (section <c>Deploy</c>).
 /// </summary>
 /// <remarks>
-/// An ApiSecret is only written when no ApiKey is set, because Umbraco Cloud git-based projects still use the ApiKey (see ADR 0002).
+/// Never writes an ApiSecret or ApiKey: Umbraco Cloud provisions them (see ADR 0008).
 /// </remarks>
 internal sealed class CloudConfigurationWriter : IDeployConfigurationWriter
 {
     private static readonly string[] Settings = ["Deploy", "Settings"];
     private static readonly string[] Project = ["Deploy", "Project"];
 
-    private readonly Func<string> _generateSecret;
     private readonly Func<Guid> _newId;
 
-    public CloudConfigurationWriter(Func<string> generateSecret, Func<Guid> newId)
-    {
-        _generateSecret = generateSecret;
-        _newId = newId;
-    }
+    public CloudConfigurationWriter(Func<Guid> newId) => _newId = newId;
 
     public DeployPackage Package => DeployPackage.Cloud;
 
@@ -56,24 +51,9 @@ internal sealed class CloudConfigurationWriter : IDeployConfigurationWriter
             }
         }
 
-        string[] apiSecretPath = [.. Settings, "ApiSecret"];
-        if (string.IsNullOrEmpty(document.GetString([.. Settings, "ApiKey"])) is false)
+        if (string.IsNullOrEmpty(document.GetString([.. Settings, "ApiSecret"])) && string.IsNullOrEmpty(document.GetString([.. Settings, "ApiKey"])))
         {
-            outcome.Notes.Add("No ApiSecret was written, because an ApiKey is configured and Umbraco Cloud git-based projects still use it.");
-            if (request.RotateSecret)
-            {
-                outcome.Warnings.Add("--rotate-secret has no effect while an ApiKey is configured in umbraco-cloud.json.");
-            }
-        }
-        else if (ApiSecret.IsValid(document.GetString(apiSecretPath)) && request.RotateSecret is false)
-        {
-            outcome.Notes.Add("Kept the existing ApiSecret.");
-        }
-        else
-        {
-            outcome.GeneratedApiSecret = _generateSecret();
-            document.Set(apiSecretPath, outcome.GeneratedApiSecret);
-            outcome.Changes.Add("Generated a new ApiSecret.");
+            outcome.Notes.Add("No ApiSecret is configured in umbraco-cloud.json; Umbraco Cloud provisions it for its environments, so the CLI doesn't generate one.");
         }
 
         ReportBaseline(document, outcome);

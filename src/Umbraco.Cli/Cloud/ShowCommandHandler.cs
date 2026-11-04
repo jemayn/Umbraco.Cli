@@ -26,7 +26,7 @@ internal sealed class ShowCommandHandler
 
     public async Task<int> HandleAsync(ShowCommandSettings settings, CancellationToken cancellationToken)
     {
-        CloudCredentials credentials = CloudCredentialsResolver.Resolve(settings.ProjectId, settings.ApiKey, _environment, settings.Config);
+        CloudCredentials credentials = CloudCredentialsResolver.Resolve(settings.ProjectId, _environment, settings.Config);
         DeploymentResponse deployment = settings.Wait
             ? await _waiter.WaitAsync(credentials, settings.DeploymentId, settings.Timeout, cancellationToken)
             : await _cloudApiClient.GetDeploymentAsync(credentials, settings.DeploymentId, lastModifiedUtc: null, cancellationToken);

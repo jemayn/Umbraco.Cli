@@ -1,0 +1,6 @@
+# Relaxations for test projects (merged with the root .editorconfig)
+[*.cs]
+# Missing XML comment for publicly visible type or member
+dotnet_diagnostic.CS1591.severity = none
+# Remove unnecessary expression value
+dotnet_diagnostic.IDE0058.severity = none

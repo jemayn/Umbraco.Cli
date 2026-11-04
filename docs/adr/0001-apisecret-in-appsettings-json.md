@@ -9,4 +9,6 @@
 
 ## Consequences
 
-The ApiSecret ends up in a file that is usually committed. The CLI prints the newly generated ApiSecret so it can be moved to environment variables or a secret store for hosted Environments when committing it is not acceptable.
+The ApiSecret ends up in a file that is usually committed; move it to environment variables or a secret store for hosted Environments when committing it is not acceptable. The CLI never prints the generated ApiSecret, so it can't end up in CI/CD logs (see [ADR 0008](0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md)); it's read from `appsettings.json`.
+
+This only applies to Umbraco Deploy On-Premises: for Umbraco Deploy Cloud, Umbraco Cloud provisions the ApiSecret (ADR 0008).

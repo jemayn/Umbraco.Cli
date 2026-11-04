@@ -16,6 +16,30 @@ internal sealed class CloudApiClient : ICloudApiClient
 
     public const string DefaultBaseAddress = "https://api.cloud.umbraco.com/";
 
+    /// <summary>
+    /// The path (relative to the project) of the local development values: provisional, as the endpoint isn't available yet (see ADR 0010).
+    /// </summary>
+    public const string LocalDevelopmentValuesPath = "local-development/values";
+
+    /// <summary>
+    /// Gets the base address of the API: the default, or an override that must use HTTPS (HTTP only for localhost), because every request carries the API key.
+    /// </summary>
+    public static Uri GetBaseAddress(string? overrideUrl, string variable)
+    {
+        if (string.IsNullOrEmpty(overrideUrl))
+        {
+            return new Uri(DefaultBaseAddress);
+        }
+
+        if (Uri.TryCreate(overrideUrl.TrimEnd('/') + "/", UriKind.Absolute, out Uri? uri) is false
+            || (uri.Scheme != Uri.UriSchemeHttps && (uri.Scheme != Uri.UriSchemeHttp || uri.IsLoopback is false)))
+        {
+            throw new UsageException($"{variable} must be an absolute HTTPS URL (HTTP only for localhost), because the API key is sent with every request.");
+        }
+
+        return uri;
+    }
+
     public const int MaxPollAttempts = 5;
 
     private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromSeconds(5);
@@ -148,6 +172,24 @@ internal sealed class CloudApiClient : ICloudApiClient
         }
     }
 
+    public async Task<IReadOnlyDictionary<string, string>> GetLocalDevelopmentValuesAsync(CloudCredentials credentials, CancellationToken cancellationToken)
+    {
+        using HttpRequestMessage request = CreateRequest(HttpMethod.Get, credentials, LocalDevelopmentValuesPath);
+        using CancellationTokenSource timeout = CreateTimeout(cancellationToken);
+        using HttpResponseMessage response = await _httpClient.SendAsync(request, timeout.Token);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            _reporter.Verbose($"{request.Method} {request.RequestUri} responded 404 Not Found");
+            throw new CloudApiException(
+                response.StatusCode,
+                "Umbraco Cloud doesn't provide the local development values for this project (404 Not Found).",
+                "Check the project ID; the endpoint for local development values may not be available yet.");
+        }
+
+        LocalDevelopmentValuesResponse values = await ReadAsync(response, CloudJsonContext.Default.LocalDevelopmentValuesResponse, cancellationToken);
+        return values.Values;
+    }
+
     /// <summary>
     /// Gets the delay before the next attempt: 5 seconds, doubling, up to the 25 second poll interval.
     /// </summary>
@@ -228,7 +270,7 @@ internal sealed class CloudApiClient : ICloudApiClient
                 HttpStatusCode.Unauthorized => new CloudApiException(
                     response.StatusCode,
                     "Umbraco Cloud rejected the credentials (401 Unauthorized).",
-                    "Check the project ID and CI/CD API key (--project-id/UMBRACO_CLOUD_PROJECT_ID and --api-key/UMBRACO_CLOUD_API_KEY)."),
+                    "Check the project ID (--project-id or UMBRACO_CLOUD_PROJECT_ID) and the CI/CD API key (UMBRACO_CLOUD_API_KEY)."),
                 _ => new CloudApiException(
                     response.StatusCode,
                     $"Umbraco Cloud responded {(int)response.StatusCode} {response.ReasonPhrase}{FormatProblem(problem)}."),

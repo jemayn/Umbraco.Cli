@@ -1,7 +1,7 @@
 namespace Umbraco.Cli.Deploy.Schema;
 
 /// <summary>
-/// The options that select the Environment of a schema deployment and its credentials.
+/// The options that select the Environment of a schema deployment (its credentials come from environment variables or the configuration files).
 /// </summary>
 internal sealed record SchemaTargetSettings
 {
@@ -13,8 +13,4 @@ internal sealed record SchemaTargetSettings
     public string? Environment { get; init; }
 
     public string? Url { get; init; }
-
-    public string? ApiSecret { get; init; }
-
-    public string? ApiKey { get; init; }
 }

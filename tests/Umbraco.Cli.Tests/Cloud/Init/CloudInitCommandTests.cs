@@ -3,6 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using NUnit.Framework;
+using Umbraco.Cli.Cloud;
+using Umbraco.Cli.Cloud.Api;
+using Umbraco.Cli.Cloud.Init;
 using Umbraco.Cli.Infrastructure;
 using Umbraco.Cli.Infrastructure.NuGet;
 using Umbraco.Cli.Infrastructure.Output;
@@ -23,6 +26,8 @@ public class CloudInitCommandTests
     private Mock<IPrompter> _prompter = null!;
     private List<string[]> _commands = null!;
     private FakeNuGetClient _nuGet = null!;
+    private Mock<ICloudApiClient> _cloudApi = null!;
+    private Mock<IGit> _git = null!;
 
     [SetUp]
     public void SetUp()
@@ -32,6 +37,8 @@ public class CloudInitCommandTests
         _environment = new FakeEnvironment(_directory) { CacheDirectory = Path.Combine(_directory, ".cache") };
         _commands = [];
         _prompter = new Mock<IPrompter>(MockBehavior.Strict);
+        _cloudApi = new Mock<ICloudApiClient>(MockBehavior.Strict);
+        _git = new Mock<IGit>();
         _dotnet = new Mock<IDotnetCli>();
         _dotnet.Setup(x => x.GetSdkVersionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("10.0.401");
         _dotnet
@@ -304,6 +311,19 @@ public class CloudInitCommandTests
     }
 
     [Test]
+    public async Task Existing_WithCentralPackageManagement_AddsPackagesWithARestore()
+    {
+        string project = CreateExistingProject(("Umbraco.Cms", "17.7.0"));
+        File.WriteAllText(Path.Combine(_directory, "Directory.Packages.props"), "<Project />");
+
+        CliResult result = await RunAsync("cloud", "init", "--no-build");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        string[] add = _commands.First(command => command[0] == "package");
+        Assert.That(add, Is.EqualTo(new[] { "package", "add", "Umbraco.Cloud.Cms", "--version", "17.2.3", "--project", project }));
+    }
+
+    [Test]
     public async Task Existing_GitDeployment_WritesDotUmbraco()
     {
         CreateExistingProject(("Umbraco.Cms", "17.7.0"));
@@ -366,13 +386,71 @@ public class CloudInitCommandTests
     }
 
     [Test]
-    public async Task IdentityValues_AreWrittenButNeverPrinted()
+    public async Task Help_HasNoIdentityOptions()
     {
-        CliResult result = await RunAsync("cloud", "init", "--name", "MySite", "--no-build", "--identity-client-id", "my-id", "--identity-client-secret", "my-secret", "--verbose");
+        CliResult result = await RunAsync("cloud", "init", "--help");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
-        Assert.That(File.ReadAllText(Path.Combine(_directory, "src", "MySite", "umbraco-cloud.json")), Does.Contain("my-secret"));
-        Assert.That(result.Stdout + result.Stderr, Does.Not.Contain("my-secret"));
+        Assert.That(result.Stdout, Does.Not.Contain("--identity-client"));
+    }
+
+    [Test]
+    public async Task IdentityVariables_AreNotWrittenToUmbracoCloudJson()
+    {
+        _environment.Variables["UMBRACO_CLOUD_IDENTITY_CLIENT_ID"] = "my-id";
+        _environment.Variables["UMBRACO_CLOUD_IDENTITY_CLIENT_SECRET"] = "my-secret";
+
+        CliResult result = await RunAsync("cloud", "init", "--name", "MySite", "--no-build");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        string umbracoCloudJson = File.ReadAllText(Path.Combine(_directory, "src", "MySite", "umbraco-cloud.json"));
+        Assert.That(umbracoCloudJson, Does.Not.Contain("my-secret").And.Contain(IdentityValues.PlaceholderClientSecret));
+    }
+
+    [Test]
+    public async Task Secrets_NotConfigured_GuidesToSetTheVariablesAndPull()
+    {
+        CliResult result = await RunAsync("cloud", "init", "--name", "MySite", "--no-build");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(result.Stdout, Does.Contain($"1. Set the {CloudCredentialsResolver.ProjectIdVariable} and {CloudCredentialsResolver.ApiKeyVariable} environment variables"));
+        Assert.That(result.Stdout, Does.Contain("umbraco cloud secrets pull").And.Contain("4. Deploy"));
+        Assert.That(File.Exists(Path.Combine(_directory, LocalEnvironmentFile.FileName)), Is.False);
+    }
+
+    [Test]
+    public async Task Secrets_Configured_PullsThemIntoTheRepository()
+    {
+        _environment.Variables[CloudCredentialsResolver.ProjectIdVariable] = "project-1";
+        _environment.Variables[CloudCredentialsResolver.ApiKeyVariable] = "key-1";
+        _git.Setup(x => x.GetRepositoryRootAsync(_directory, It.IsAny<CancellationToken>())).ReturnsAsync(_directory);
+        _git.Setup(x => x.IsIgnoredAsync(_directory, LocalEnvironmentFile.FileName, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _cloudApi
+            .Setup(x => x.GetLocalDevelopmentValuesAsync(It.Is<CloudCredentials>(credentials => credentials.ProjectId == "project-1"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string> { ["UMBRACO_DEPLOY_API_SECRET"] = "s3cr3t" });
+
+        CliResult result = await RunAsync("cloud", "init", "--name", "MySite", "--no-build", "-o", "json");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(JsonNode.Parse(result.Stdout)!["secrets"]!.GetValue<string>(), Is.EqualTo("pulled"));
+        Assert.That(LocalEnvironmentFile.Read(Path.Combine(_directory, LocalEnvironmentFile.FileName))["UMBRACO_DEPLOY_API_SECRET"], Is.EqualTo("s3cr3t"));
+        Assert.That(result.ToString(), Does.Not.Contain("s3cr3t"));
+    }
+
+    [Test]
+    public async Task Secrets_PullFails_OnlyWarns()
+    {
+        _environment.Variables[CloudCredentialsResolver.ProjectIdVariable] = "project-1";
+        _environment.Variables[CloudCredentialsResolver.ApiKeyVariable] = "key-1";
+        _cloudApi
+            .Setup(x => x.GetLocalDevelopmentValuesAsync(It.IsAny<CloudCredentials>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CloudApiException(System.Net.HttpStatusCode.NotFound, "Not available."));
+
+        CliResult result = await RunAsync("cloud", "init", "--name", "MySite", "--no-build");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("Couldn't pull the local development values").And.Contain("umbraco cloud secrets pull"));
+        Assert.That(result.Stdout, Does.Contain("1. Pull the local development values from Umbraco Cloud"));
     }
 
     private string CreateExistingProject(params (string Id, string Version)[] packages)
@@ -421,6 +499,8 @@ public class CloudInitCommandTests
                 services.AddSingleton(_dotnet.Object);
                 services.AddSingleton(_prompter.Object);
                 services.AddSingleton<INuGetClient>(_nuGet);
+                services.AddSingleton(_cloudApi.Object);
+                services.AddSingleton(_git.Object);
                 services.AddSingleton(timeProvider);
             },
             args);

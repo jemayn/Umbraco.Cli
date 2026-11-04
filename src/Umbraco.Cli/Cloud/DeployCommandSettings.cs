@@ -9,8 +9,6 @@ internal sealed record DeployCommandSettings
 {
     public string? ProjectId { get; init; }
 
-    public string? ApiKey { get; init; }
-
     /// <summary>
     /// Gets the <c>umbraco-cloud.json</c> (or a folder containing it) to read the project ID from; defaults to the uploaded directory.
     /// </summary>

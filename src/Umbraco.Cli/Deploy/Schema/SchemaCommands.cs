@@ -109,34 +109,17 @@ internal static class SchemaCommands
             Description = $"The {SchemaTargetResolver.AppSettingsFileName} or {SchemaTargetResolver.UmbracoCloudFileName} of the Umbraco project to read the Environments and the ApiSecret from, or a folder containing them, such as the published output (default: the current directory).",
         };
 
-        public Option<string> ApiSecret { get; } = new("--api-secret")
-        {
-            Description = $"The ApiSecret of Umbraco Deploy on the Environment [env: {SchemaTargetResolver.ApiSecretVariable}].",
-        };
-
-        public Option<string> ApiKey { get; } = new("--api-key")
-        {
-            Description = $"The obsolete ApiKey of Umbraco Deploy on the Environment, instead of an ApiSecret [env: {SchemaTargetResolver.ApiKeyVariable}].",
-        };
-
         public void AddTo(Command command)
         {
             command.Options.Add(Environment);
             command.Options.Add(Url);
             command.Options.Add(Config);
-            command.Options.Add(ApiSecret);
-            command.Options.Add(ApiKey);
 
             command.Validators.Add(result =>
             {
-                if (result.GetValue(Environment) is null == result.GetValue(Url) is null)
+                if ((result.GetValue(Environment) is null) == (result.GetValue(Url) is null))
                 {
                     result.AddError("Specify exactly one of --environment or --url.");
-                }
-
-                if (result.GetValue(ApiSecret) is not null && result.GetValue(ApiKey) is not null)
-                {
-                    result.AddError("Specify only one of --api-secret or --api-key.");
                 }
             });
         }
@@ -147,8 +130,6 @@ internal static class SchemaCommands
                 Config = parseResult.GetValue(Config),
                 Environment = parseResult.GetValue(Environment),
                 Url = parseResult.GetValue(Url),
-                ApiSecret = parseResult.GetValue(ApiSecret),
-                ApiKey = parseResult.GetValue(ApiKey),
             };
     }
 }

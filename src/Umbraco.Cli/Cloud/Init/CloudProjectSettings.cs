@@ -14,27 +14,24 @@ internal static class CloudProjectSettings
     public const string CloudLicense = "UMBRACO-CLOUD";
 
     /// <summary>
-    /// Creates <c>umbraco-cloud.json</c> with an <c>Identity</c> block when missing (with <paramref name="given" /> or placeholder values),
-    /// or sets its Identity values when <paramref name="given" /> values exist; otherwise leaves it unchanged.
+    /// Creates <c>umbraco-cloud.json</c> with an <c>Identity</c> block of placeholder values when missing; otherwise leaves it unchanged.
     /// </summary>
-    /// <returns><c>placeholder</c>, <c>provided</c> or <c>unchanged</c>.</returns>
-    public static string EnsureUmbracoCloudJson(string projectDirectory, IdentityValues? given, List<string> filesWritten)
+    /// <returns><c>placeholder</c> or <c>unchanged</c>.</returns>
+    public static string EnsureUmbracoCloudJson(string projectDirectory, List<string> filesWritten)
     {
         string path = Path.Combine(projectDirectory, UmbracoCloudJsonFileName);
-        bool exists = File.Exists(path);
-        if (exists && given is null)
+        if (File.Exists(path))
         {
             return "unchanged";
         }
 
-        IdentityValues values = given ?? IdentityValues.Placeholder;
-        JsonDocumentEditor document = exists ? Load(path) : JsonDocumentEditor.Parse("{}");
-        document.Set(["Identity", "ClientId"], values.ClientId);
-        document.Set(["Identity", "ClientSecret"], values.ClientSecret);
+        JsonDocumentEditor document = JsonDocumentEditor.Parse("{}");
+        document.Set(["Identity", "ClientId"], IdentityValues.PlaceholderClientId);
+        document.Set(["Identity", "ClientSecret"], IdentityValues.PlaceholderClientSecret);
         AtomicFile.WriteAllBytes(path, document.ToBytes());
         filesWritten.Add(path);
 
-        return values.IsPlaceholder ? "placeholder" : "provided";
+        return "placeholder";
     }
 
     /// <summary>

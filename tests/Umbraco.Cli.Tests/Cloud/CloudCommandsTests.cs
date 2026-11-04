@@ -54,19 +54,44 @@ public class CloudCommandsTests
     }
 
     [Test]
-    public async Task Upload_OptionsOverrideEnvironmentVariables()
+    public async Task Upload_ProjectIdOptionOverridesTheEnvironmentVariable()
     {
         string zip = Path.Combine(_directory, "site.zip");
         await File.WriteAllTextAsync(zip, "zip");
         _handler.Respond(HttpStatusCode.OK, """{ "artifactId": "a-1", "fileSize": 3 }""");
 
-        CliResult result = await RunAsync("cloud", "deployments", "upload", "--file", zip, "--project-id", "project-2", "--api-key", "key-2");
+        CliResult result = await RunAsync("cloud", "deployments", "upload", "--file", zip, "--project-id", "project-2");
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
         Assert.That(result.Stdout.Trim(), Is.EqualTo("Artifact a-1 uploaded (3 B)."));
         RecordedRequest request = _handler.Requests.Single();
         Assert.That(request.Uri.AbsolutePath, Is.EqualTo("/v2/projects/project-2/deployments/artifacts"));
-        Assert.That(request.Headers[CloudApiClient.ApiKeyHeaderName], Is.EqualTo("key-2"));
+        Assert.That(request.Headers[CloudApiClient.ApiKeyHeaderName], Is.EqualTo("key-1"));
+    }
+
+    [Test]
+    public async Task Upload_ApiKeyOption_DoesNotExist()
+    {
+        string zip = Path.Combine(_directory, "site.zip");
+        await File.WriteAllTextAsync(zip, "zip");
+
+        CliResult result = await RunAsync("cloud", "deployments", "upload", "--file", zip, "--api-key", "key-2");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(_handler.Requests, Is.Empty);
+    }
+
+    [Test]
+    public async Task Upload_MissingApiKeyVariable_ExplainsWhereToGetIt()
+    {
+        _environment.Variables.Remove(CloudCredentialsResolver.ApiKeyVariable);
+        string zip = Path.Combine(_directory, "site.zip");
+        await File.WriteAllTextAsync(zip, "zip");
+
+        CliResult result = await RunAsync("cloud", "deployments", "upload", "--file", zip);
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(result.Stderr, Does.Contain(CloudCredentialsResolver.ApiKeyVariable).And.Contain("CI/CD Flow"));
     }
 
     [Test]

@@ -7,15 +7,14 @@ namespace Umbraco.Cli.Tests.Deploy;
 [TestFixture]
 public class CloudConfigurationWriterTests
 {
-    private const string GeneratedSecret = "GENERATED+SECRET/==";
     private static readonly Guid NewId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid ProjectId = Guid.Parse("50b4a602-7140-4e55-8dfd-1eae73068fa0");
     private static readonly string ValidSecret = Convert.ToBase64String(new byte[64]);
 
-    private readonly CloudConfigurationWriter _writer = new(() => GeneratedSecret, () => NewId);
+    private readonly CloudConfigurationWriter _writer = new(() => NewId);
 
     [Test]
-    public void Apply_NewFile_WritesEnvironmentsProjectIdAndSecret()
+    public void Apply_NewFile_WritesEnvironmentsAndProjectIdButNoSecret()
     {
         var document = JsonDocumentEditor.Parse("{}");
 
@@ -34,13 +33,12 @@ public class CloudConfigurationWriterTests
                     }
                   ],
                   "Id": "{{ProjectId}}"
-                },
-                "Settings": {
-                  "ApiSecret": "{{GeneratedSecret}}"
                 }
               }
             }
             """.ReplaceLineEndings("\n")));
+        Assert.That(outcome.GeneratedApiSecret, Is.Null);
+        Assert.That(outcome.Notes, Has.Some.Contains("Umbraco Cloud provisions it"));
         Assert.That(outcome.Notes, Has.Some.Contains("--skip-preserve-umbraco-cloud-json"));
     }
 
@@ -54,33 +52,21 @@ public class CloudConfigurationWriterTests
 
         Assert.That(document.ToString(), Is.EqualTo(original));
         Assert.That(outcome.GeneratedApiSecret, Is.Null);
-        Assert.That(outcome.Notes, Has.Some.Contains("an ApiKey is configured"));
+        Assert.That(outcome.Notes, Is.Empty);
         Assert.That(outcome.Warnings, Is.Empty);
     }
 
     [Test]
-    public void Apply_ApiKeyWithRotate_WarnsAndWritesNoSecret()
+    public void Apply_ExistingSecret_IsNeverChanged()
     {
-        var document = JsonDocumentEditor.Parse("""{ "Deploy": { "Settings": { "ApiKey": "cloud-api-key" } } }""");
+        var document = JsonDocumentEditor.Parse($$"""{ "Deploy": { "Settings": { "ApiSecret": "{{ValidSecret}}" } } }""");
+        string original = document.ToString();
 
-        InitOutcome outcome = _writer.Apply(document, new InitRequest(null, null, null, RotateSecret: true));
+        InitOutcome outcome = _writer.Apply(document, new InitRequest(null, null, null, RotateSecret: false));
 
-        Assert.That(document.GetString("Deploy", "Settings", "ApiSecret"), Is.Null);
-        Assert.That(document.GetString("Deploy", "Settings", "ApiKey"), Is.EqualTo("cloud-api-key"));
-        Assert.That(outcome.Warnings.Single(), Does.Contain("--rotate-secret has no effect"));
-    }
-
-    [Test]
-    public void Apply_ValidSecret_KeepsItUnlessRotated()
-    {
-        var kept = JsonDocumentEditor.Parse($$"""{ "Deploy": { "Settings": { "ApiSecret": "{{ValidSecret}}" } } }""");
-        var rotated = JsonDocumentEditor.Parse($$"""{ "Deploy": { "Settings": { "ApiSecret": "{{ValidSecret}}" } } }""");
-
-        _writer.Apply(kept, new InitRequest(null, null, null, RotateSecret: false));
-        _writer.Apply(rotated, new InitRequest(null, null, null, RotateSecret: true));
-
-        Assert.That(kept.GetString("Deploy", "Settings", "ApiSecret"), Is.EqualTo(ValidSecret));
-        Assert.That(rotated.GetString("Deploy", "Settings", "ApiSecret"), Is.EqualTo(GeneratedSecret));
+        Assert.That(document.ToString(), Is.EqualTo(original));
+        Assert.That(outcome.GeneratedApiSecret, Is.Null);
+        Assert.That(outcome.Notes, Is.Empty);
     }
 
     [Test]

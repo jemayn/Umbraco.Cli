@@ -16,7 +16,8 @@ internal sealed class ArtifactZipBuilder
     public ArtifactZipBuilder(IGit git) => _git = git;
 
     /// <summary>
-    /// Zips a directory: all files for an Artifact deployment, or the files git would commit (never <c>.git</c>, always <c>.gitignore</c>) for a Git deployment. When <c>type</c> is <c>null</c>, it is detected like Umbraco Cloud does.
+    /// Zips a directory: all files for an Artifact deployment, or the files git would commit (never <c>.git</c>, always <c>.gitignore</c>) for a Git deployment,
+    /// leaving out the <see cref="ArtifactExclusions" />. When <c>type</c> is <c>null</c>, it is detected like Umbraco Cloud does.
     /// </summary>
     public async Task<ArtifactPackage> CreateAsync(string directory, DeploymentType? type, CancellationToken cancellationToken)
     {
@@ -31,7 +32,9 @@ internal sealed class ArtifactZipBuilder
             $"Could not detect the deployment type of '{directory}': it contains neither Umbraco.Core.dll at its root (published output) nor a project or solution file (source code).",
             "Use --type git or --type artifact.");
 
-        IReadOnlyList<string> files = resolvedType == DeploymentType.Git ? await GetGitFilesAsync(root, cancellationToken) : allFiles;
+        IReadOnlyList<string> candidates = resolvedType == DeploymentType.Git ? await GetGitFilesAsync(root, cancellationToken) : allFiles;
+        List<string> excluded = candidates.Where(ArtifactExclusions.IsExcluded).ToList();
+        List<string> files = candidates.Where(file => ArtifactExclusions.IsExcluded(file) is false).ToList();
 
         string zipPath = Path.Combine(Path.GetTempPath(), $"umbraco-cli-{Guid.NewGuid():N}.zip");
         try
@@ -52,7 +55,7 @@ internal sealed class ArtifactZipBuilder
         }
 
         bool hasDotUmbraco = files.Contains(DotUmbracoFileName, StringComparer.Ordinal);
-        return new ArtifactPackage(zipPath, resolvedType, hasDotUmbraco, isTemporary: true);
+        return new ArtifactPackage(zipPath, resolvedType, hasDotUmbraco, isTemporary: true) { ExcludedFiles = excluded };
     }
 
     private static List<string> EnumerateFiles(string root)

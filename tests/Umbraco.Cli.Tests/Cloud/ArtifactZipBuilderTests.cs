@@ -51,6 +51,42 @@ public class ArtifactZipBuilderTests
     }
 
     [Test]
+    public async Task CreateAsync_PublishedOutput_LeavesOutExcludedFilesAndReportsThem()
+    {
+        WriteFiles("Umbraco.Core.dll", "appsettings.json", ".env", "umbraco/Data/Umbraco.sqlite.db", "umbraco/Logs/log.json", "umbraco/Data/TEMP/x.tmp");
+
+        using ArtifactPackage package = await CreateBuilder().CreateAsync(_directory, type: null, CancellationToken.None);
+
+        Assert.That(ReadEntries(package), Is.EquivalentTo(new[] { "Umbraco.Core.dll", "appsettings.json" }));
+        Assert.That(package.ExcludedFiles, Is.EquivalentTo(new[] { ".env", "umbraco/Data/Umbraco.sqlite.db", "umbraco/Logs/log.json", "umbraco/Data/TEMP/x.tmp" }));
+    }
+
+    [Test]
+    public async Task CreateAsync_SourceCode_LeavesOutExcludedFilesThatGitWouldCommit()
+    {
+        WriteFiles("Site.csproj", ".umbraco", "src/Site/.env.local", "src/Site/appsettings.json");
+        _git.Setup(x => x.ListFilesAsync(Path.GetFullPath(_directory), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["Site.csproj", ".umbraco", "src/Site/.env.local", "src/Site/appsettings.json"]);
+
+        using ArtifactPackage package = await CreateBuilder().CreateAsync(_directory, type: null, CancellationToken.None);
+
+        Assert.That(ReadEntries(package), Is.EquivalentTo(new[] { "Site.csproj", ".umbraco", "src/Site/appsettings.json" }));
+        Assert.That(package.ExcludedFiles, Is.EqualTo(new[] { "src/Site/.env.local" }));
+    }
+
+    [TestCase(".env", true)]
+    [TestCase("src/Site/.env.production", true)]
+    [TestCase(".git", true)]
+    [TestCase("umbraco/Data/Umbraco.sqlite.db-wal", true)]
+    [TestCase("src/Site/umbraco/Logs/UmbracoTraceLog.json", true)]
+    [TestCase(".environment", false)]
+    [TestCase("my.env", false)]
+    [TestCase("umbraco/Data/Umbraco.sqlite.db.bak", false)]
+    [TestCase("wwwroot/umbraco/Logs.css", false)]
+    public void IsExcluded_MatchesTheDenyList(string path, bool expected)
+        => Assert.That(ArtifactExclusions.IsExcluded(path), Is.EqualTo(expected));
+
+    [Test]
     public async Task CreateAsync_SourceCodeWithoutDotUmbraco_ReportsIt()
     {
         WriteFiles("Site.csproj");

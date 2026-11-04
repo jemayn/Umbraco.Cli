@@ -12,7 +12,7 @@ This revises the assumption in [ADR 0001](0001-apisecret-in-appsettings-json.md)
 
 ## Consequences
 
-- A generated Baseline secret or child secret is printed once, and the same value must be set on the other side of the Baseline connection (as `BaselineApiSecret` on the Child project, or as a `ChildApiSecrets` entry on the Baseline project's Live environment).
+- A generated Baseline secret or child secret is written to `appsettings.json` and never printed (see [ADR 0008](0008-umbraco-cloud-secrets-are-provisioned-by-umbraco-cloud.md)), and the same value must be set on the other side of the Baseline connection (as `BaselineApiSecret` on the Child project, or as a `ChildApiSecrets` entry on the Baseline project's Live environment).
 - A child secret written to the Baseline project's `appsettings.json` must not be committed to a repository that Child projects are created from (Umbraco Deploy's own guidance), so the CLI warns and points to the environment variable that sets it instead.
 - Rotating a child secret without downtime means adding a second entry, switching the Child project to it, then removing the first.
 - Baseline connections need Umbraco.Deploy.OnPrem 17.4.0 or later (17.x) or 18.2.0 or later (18.x); with older versions the settings are ignored, so the CLI warns.

@@ -32,10 +32,6 @@ internal sealed record CloudInitSettings
 
     public IReadOnlyList<string> Add { get; init; } = [];
 
-    public string? IdentityClientId { get; init; }
-
-    public string? IdentityClientSecret { get; init; }
-
     public bool AllowEndOfLife { get; init; }
 
     public bool NoBuild { get; init; }

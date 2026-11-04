@@ -95,13 +95,10 @@ internal sealed class InitCommandHandler
             Environments = outcome.Environments,
             Changes = outcome.Changes,
             ApiSecretGenerated = outcome.GeneratedApiSecret is not null,
-            ApiSecret = settings.DryRun ? null : outcome.GeneratedApiSecret,
             BaselineUrl = outcome.BaselineUrl,
             BaselineSecretGenerated = outcome.GeneratedBaselineSecret is not null,
-            BaselineSecret = settings.DryRun ? null : outcome.GeneratedBaselineSecret,
             ChildSecretGenerated = outcome.GeneratedChildSecret is not null,
             ChildSecretName = outcome.GeneratedChildSecretName,
-            ChildSecret = settings.DryRun ? null : outcome.GeneratedChildSecret,
             BaselineSecretConfigured = outcome.BaselineSecretConfigured,
             ChildSecretCount = outcome.ChildSecretCount,
         };
@@ -162,25 +159,29 @@ internal sealed class InitCommandHandler
             text.AppendLine($"  Environment {environment.Name} ({environment.Type}): {environment.Url}");
         }
 
+        // Generated secrets are only written to the file, never to the output, so they can't end up in logs (such as CI/CD build logs)
+        string written = result.DryRun ? "would be written" : "was written";
         if (outcome.GeneratedApiSecret is not null)
         {
             text.AppendLine();
-            text.AppendLine("New ApiSecret (every environment must be configured with this same value):");
-            text.AppendLine(result.DryRun ? ApiSecret.Masked : outcome.GeneratedApiSecret);
+            text.AppendLine($"The new ApiSecret {written} to Umbraco:Deploy:Settings:ApiSecret in {result.File}; every environment must be configured with this same value.");
         }
 
         if (outcome.GeneratedBaselineSecret is not null)
         {
             text.AppendLine();
-            text.AppendLine($"New Baseline secret (add it to ChildApiSecrets on the Baseline project's Live environment under a name of your choice, preferably as the environment variable {OnPremisesConfigurationWriter.ChildSecretVariable("<name>")}):");
-            text.AppendLine(result.DryRun ? ApiSecret.Masked : outcome.GeneratedBaselineSecret);
+            text.AppendLine($"The new Baseline secret {written} to Umbraco:Deploy:Settings:BaselineApiSecret in {result.File}; add the same value to ChildApiSecrets on the Baseline project's Live environment under a name of your choice, preferably as the environment variable {OnPremisesConfigurationWriter.ChildSecretVariable("<name>")}.");
         }
 
         if (outcome.GeneratedChildSecret is not null)
         {
             text.AppendLine();
-            text.AppendLine($"New child secret '{outcome.GeneratedChildSecretName}' (set it as BaselineApiSecret on the Child project):");
-            text.AppendLine(result.DryRun ? ApiSecret.Masked : outcome.GeneratedChildSecret);
+            text.AppendLine($"The new child secret '{outcome.GeneratedChildSecretName}' {written} to Umbraco:Deploy:Settings:ChildApiSecrets in {result.File}; set the same value as BaselineApiSecret on the Child project.");
+        }
+
+        if (outcome.GeneratedApiSecret is not null || outcome.GeneratedBaselineSecret is not null || outcome.GeneratedChildSecret is not null)
+        {
+            text.AppendLine("Secrets are never shown in the output, so they can't end up in logs.");
         }
 
         return text.ToString().TrimEnd();
@@ -203,6 +204,11 @@ internal sealed class InitCommandHandler
             throw new UsageException("--current-environment only applies to Umbraco Deploy On-Premises; Umbraco Cloud determines the current environment itself.");
         }
 
+        if (settings.RotateSecret)
+        {
+            throw new UsageException("--rotate-secret only applies to Umbraco Deploy On-Premises; Umbraco Cloud provisions the ApiSecret itself.");
+        }
+
         string? projectId = settings.ProjectId ?? _environment.GetVariable(Cloud.CloudCredentialsResolver.ProjectIdVariable);
         if (string.IsNullOrWhiteSpace(projectId))
         {
@@ -214,14 +220,13 @@ internal sealed class InitCommandHandler
 
     private bool IsBaselineVariableApplicable(InitCommandSettings settings)
         => string.IsNullOrWhiteSpace(_environment.GetVariable(BaselineSecretVariable)) is false
-            && settings.BaselineSecret is null
             && settings.RotateBaselineSecret is false
             && settings.RemoveBaseline is false;
 
     private BaselineOptions? ValidateBaselineOptions(InitCommandSettings settings, DeployPackage package, JsonDocumentEditor document, out bool secretFromVariable)
     {
         secretFromVariable = false;
-        var requested = new BaselineOptions(settings.BaselineUrl, settings.BaselineSecret, settings.RotateBaselineSecret, settings.RemoveBaseline, settings.ChildSecret, settings.RemoveChildSecret);
+        var requested = new BaselineOptions(settings.BaselineUrl, Secret: null, settings.RotateBaselineSecret, settings.RemoveBaseline, settings.ChildSecret, settings.RemoveChildSecret);
 
         string? variableSecret = null;
         if (package == DeployPackage.OnPremises && IsBaselineVariableApplicable(settings))
@@ -239,17 +244,12 @@ internal sealed class InitCommandHandler
         {
             throw new UsageException(
                 "The Baseline options only apply to Umbraco Deploy On-Premises; Umbraco Cloud provisions the Baseline settings itself.",
-                "Remove --baseline-url, --baseline-secret, --rotate-baseline-secret, --remove-baseline, --child-secret and --remove-child-secret.");
+                "Remove --baseline-url, --rotate-baseline-secret, --remove-baseline, --child-secret and --remove-child-secret.");
         }
 
-        if (settings.RotateBaselineSecret && settings.BaselineSecret is not null)
+        if (settings.RemoveBaseline && (settings.BaselineUrl is not null || settings.RotateBaselineSecret))
         {
-            throw new UsageException("--rotate-baseline-secret and --baseline-secret cannot be combined.");
-        }
-
-        if (settings.RemoveBaseline && (settings.BaselineUrl is not null || settings.BaselineSecret is not null || settings.RotateBaselineSecret))
-        {
-            throw new UsageException("--remove-baseline cannot be combined with --baseline-url, --baseline-secret or --rotate-baseline-secret.");
+            throw new UsageException("--remove-baseline cannot be combined with --baseline-url or --rotate-baseline-secret.");
         }
 
         string? url = null;
@@ -266,12 +266,12 @@ internal sealed class InitCommandHandler
             }
         }
 
-        string? secret = settings.BaselineSecret ?? variableSecret;
+        string? secret = variableSecret;
         secretFromVariable = variableSecret is not null;
         if (secret is not null && ApiSecret.IsValid(secret) is false)
         {
             throw new UsageException(
-                $"{(secretFromVariable ? BaselineSecretVariable : "--baseline-secret")} must be Base64 for at least 64 bytes.", "Generate one with --rotate-baseline-secret, or --child-secret on the Baseline project.");
+                $"{BaselineSecretVariable} must be Base64 for at least 64 bytes.", "Generate one with --rotate-baseline-secret, or --child-secret on the Baseline project.");
         }
 
         string? childSecret = ValidateChildSecretName(settings.ChildSecret, "--child-secret");

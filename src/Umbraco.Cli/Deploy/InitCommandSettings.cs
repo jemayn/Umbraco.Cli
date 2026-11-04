@@ -17,8 +17,6 @@ internal sealed record InitCommandSettings
 
     public string? BaselineUrl { get; init; }
 
-    public string? BaselineSecret { get; init; }
-
     public bool RotateBaselineSecret { get; init; }
 
     public bool RemoveBaseline { get; init; }
