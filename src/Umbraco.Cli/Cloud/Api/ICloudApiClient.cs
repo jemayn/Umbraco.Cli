@@ -27,6 +27,11 @@ internal interface ICloudApiClient
     Task<DeploymentResponse> GetDeploymentAsync(CloudCredentials credentials, string deploymentId, DateTimeOffset? lastModifiedUtc, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Gets the ID of the latest Deployment started through the API (to the Environment with <c>environmentAlias</c>, when set), or <c>null</c> when there's none.
+    /// </summary>
+    Task<string?> GetLatestDeploymentIdAsync(CloudCredentials credentials, string? environmentAlias, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Gets the configuration values and secrets of the project for local development (provisional, see ADR 0010).
     /// </summary>
     /// <exception cref="CloudApiException">Umbraco Cloud doesn't provide them (yet), or rejected the request.</exception>

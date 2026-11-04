@@ -306,14 +306,122 @@ public class CloudCommandsTests
         Assert.That(result.Stdout.Trim(), Is.EqualTo("Deployment d-1 of artifact a-9 to dev: Pending."));
     }
 
-    [TestCase]
     [TestCase("--artifact-id", "a-1", "--file", "x.zip")]
-    public async Task Deploy_NotExactlyOneSource_ReturnsUsageExitCode(params string[] sourceArguments)
+    [TestCase("--file", "x.zip", "--path", ".")]
+    public async Task Deploy_SeveralSources_ReturnsUsageExitCode(params string[] sourceArguments)
     {
         CliResult result = await RunAsync(["cloud", "deployments", "deploy", "--environment", "dev", .. sourceArguments]);
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
-        Assert.That(result.Stderr, Does.Contain("Specify exactly one of --artifact-id, --file or --path."));
+        Assert.That(result.Stderr, Does.Contain("Specify only one of --artifact-id, --file or --path."));
+    }
+
+    [Test]
+    public async Task Deploy_NoSourceOutsideAGitDeploymentRepository_ExplainsHowToPublish()
+    {
+        string repository = CreateRepository(dotUmbraco: false);
+        _environment.CurrentDirectory = repository;
+
+        CliResult result = await RunAsync("cloud", "deployments", "deploy", "--environment", "dev");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("No artifact to upload was specified.").And.Contain("dotnet publish --output publish"));
+        Assert.That(_handler.Requests, Is.Empty);
+    }
+
+    [Test]
+    public async Task Upload_NoSourceInAGitDeploymentRepository_UploadsTheRepositoryWithTheProjectIdOfItsProject()
+    {
+        _environment.Variables.Remove(CloudCredentialsResolver.ProjectIdVariable);
+        string repository = CreateRepository(dotUmbraco: true);
+        _environment.CurrentDirectory = Path.Combine(repository, "src");
+        _git.Setup(x => x.ListFilesAsync(repository, It.IsAny<CancellationToken>())).ReturnsAsync([".umbraco", "src/Site/Site.csproj", "src/Site/umbraco-cloud.json"]);
+        _handler.Respond(HttpStatusCode.OK, """{ "artifactId": "a-1", "fileSize": 100 }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "upload");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(result.Stderr, Does.Contain($"Zipped '{repository}' for a Git deployment"));
+        Assert.That(_handler.Requests.Single().Uri.AbsolutePath, Is.EqualTo("/v2/projects/project-from-repository/deployments/artifacts"));
+    }
+
+    [Test]
+    public async Task Upload_TypeWithFile_ReturnsUsageExitCode()
+    {
+        CliResult result = await RunAsync("cloud", "deployments", "upload", "--file", "x.zip", "--type", "git");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("--type can't be used with --file."));
+    }
+
+    [Test]
+    public async Task Show_FromTheRootOfAnArtifactDeploymentRepository_FindsTheProjectId()
+    {
+        _environment.Variables.Remove(CloudCredentialsResolver.ProjectIdVariable);
+        string repository = CreateRepository(dotUmbraco: false);
+
+        // Published output has a copy of umbraco-cloud.json, but no project file
+        string publish = Directory.CreateDirectory(Path.Combine(repository, "publish")).FullName;
+        File.Copy(Path.Combine(repository, "src", "Site", "umbraco-cloud.json"), Path.Combine(publish, "umbraco-cloud.json"));
+        _environment.CurrentDirectory = repository;
+        _handler.Respond(HttpStatusCode.OK, """{ "deploymentId": "d-1", "deploymentState": "Completed" }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "show", "d-1");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(_handler.Requests.Single().Uri.AbsolutePath, Is.EqualTo("/v2/projects/project-from-repository/deployments/d-1"));
+    }
+
+    [Test]
+    public async Task Show_SeveralUmbracoProjectsInTheRepository_AsksToChoose()
+    {
+        _environment.Variables.Remove(CloudCredentialsResolver.ProjectIdVariable);
+        string repository = CreateRepository(dotUmbraco: false);
+        string other = Directory.CreateDirectory(Path.Combine(repository, "src", "Other")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(other, "Other.csproj"), "<Project />");
+        await File.WriteAllTextAsync(Path.Combine(other, "umbraco-cloud.json"), """{ "Deploy": { "Project": { "Id": "other-project" } } }""");
+        _environment.CurrentDirectory = repository;
+
+        CliResult result = await RunAsync("cloud", "deployments", "show", "d-1");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("Several Umbraco projects"));
+        Assert.That(_handler.Requests, Is.Empty);
+    }
+
+    [TestCase(null, "/v2/projects/project-1/deployments?skip=0&take=1")]
+    [TestCase("live", "/v2/projects/project-1/deployments?skip=0&take=1&targetEnvironmentAlias=live")]
+    public async Task Show_NoDeploymentId_ShowsTheLatestDeployment(string? environment, string listPath)
+    {
+        _handler
+            .Respond(HttpStatusCode.OK, """{ "projectId": "project-1", "data": [{ "id": "d-9", "state": "Completed" }], "totalItems": 3 }""")
+            .Respond(HttpStatusCode.OK, """{ "deploymentId": "d-9", "deploymentState": "Completed" }""");
+
+        CliResult result = await RunAsync(["cloud", "deployments", "show", .. environment is null ? Array.Empty<string>() : ["-e", environment]]);
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Success), result.ToString());
+        Assert.That(result.Stdout.Trim(), Is.EqualTo("Deployment d-9: Completed."));
+        Assert.That(_handler.Requests.Select(request => request.Uri.PathAndQuery), Is.EqualTo(new[] { listPath, "/v2/projects/project-1/deployments/d-9" }));
+    }
+
+    [Test]
+    public async Task Show_NoDeploymentIdWithoutDeployments_Fails()
+    {
+        _handler.Respond(HttpStatusCode.OK, """{ "projectId": "project-1", "data": [], "totalItems": 0 }""");
+
+        CliResult result = await RunAsync("cloud", "deployments", "show");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Error), result.ToString());
+        Assert.That(result.Stderr, Does.Contain("Umbraco Cloud has no deployments for this project."));
+    }
+
+    [Test]
+    public async Task Show_DeploymentIdWithEnvironment_ReturnsUsageExitCode()
+    {
+        CliResult result = await RunAsync("cloud", "deployments", "show", "d-1", "-e", "live");
+
+        Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.Usage), result.ToString());
+        Assert.That(_handler.Requests, Is.Empty);
     }
 
     [Test]
@@ -345,6 +453,24 @@ public class CloudCommandsTests
 
         Assert.That(result.ExitCode, Is.EqualTo(ExitCodes.AuthenticationFailed), result.ToString());
         Assert.That(result.Stderr, Does.Not.Contain("key-1"));
+    }
+
+    /// <summary>
+    /// Creates a git repository with an Umbraco project in <c>src/Site</c> (project ID <c>project-from-repository</c>), and a <c>.umbraco</c> file for a Git deployment.
+    /// </summary>
+    private string CreateRepository(bool dotUmbraco)
+    {
+        string repository = Directory.CreateDirectory(Path.Combine(_directory, "repository")).FullName;
+        Directory.CreateDirectory(Path.Combine(repository, ".git"));
+        string project = Directory.CreateDirectory(Path.Combine(repository, "src", "Site")).FullName;
+        File.WriteAllText(Path.Combine(project, "Site.csproj"), "<Project />");
+        File.WriteAllText(Path.Combine(project, "umbraco-cloud.json"), """{ "Deploy": { "Project": { "Id": "project-from-repository" } } }""");
+        if (dotUmbraco)
+        {
+            File.WriteAllText(Path.Combine(repository, ".umbraco"), DotUmbracoFile.Create("src/Site", "Site.csproj"));
+        }
+
+        return repository;
     }
 
     private Task<CliResult> RunAsync(params string[] args)

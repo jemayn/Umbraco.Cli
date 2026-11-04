@@ -25,7 +25,7 @@ internal sealed class SecretsPullCommandHandler
 
     public async Task<int> HandleAsync(string? projectId, CancellationToken cancellationToken)
     {
-        CloudCredentials credentials = CloudCredentialsResolver.Resolve(projectId, _environment, uploadDirectory: _environment.CurrentDirectory);
+        CloudCredentials credentials = CloudCredentialsResolver.Resolve(projectId, _environment);
 
         _reporter.Info("Pulling the local development values from Umbraco Cloud.");
         SecretsPullResult result = await _puller.PullAsync(credentials, _environment.CurrentDirectory, cancellationToken);

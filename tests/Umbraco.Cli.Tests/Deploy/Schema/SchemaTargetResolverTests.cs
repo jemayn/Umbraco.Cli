@@ -100,6 +100,41 @@ public class SchemaTargetResolverTests
     }
 
     [Test]
+    public void Resolve_NoEnvironment_UsesTheOnlyConfiguredOne()
+    {
+        WriteCloudJson(["Live"]);
+
+        SchemaTarget target = SchemaTargetResolver.Resolve(new SchemaTargetSettings(), _environment);
+
+        Assert.That(target.BaseUrl, Is.EqualTo(new Uri("https://live.example.com/")));
+        Assert.That(target.Environment, Is.EqualTo("Live"));
+    }
+
+    [Test]
+    public void Resolve_NoEnvironment_SeveralConfigured_ListsThem()
+    {
+        WriteCloudJson();
+
+        UsageException exception = Assert.Throws<UsageException>(() => SchemaTargetResolver.Resolve(new SchemaTargetSettings(), _environment))!;
+
+        Assert.That(exception.Message, Does.Contain("No target Environment was specified").And.Contain("Development, Live"));
+    }
+
+    [Test]
+    public void Resolve_NoConfig_UsesTheUmbracoProjectInTheRepository()
+    {
+        Directory.CreateDirectory(Path.Combine(_directory, ".git"));
+        string project = Directory.CreateDirectory(Path.Combine(_directory, "src", "Site")).FullName;
+        File.WriteAllText(Path.Combine(project, "Site.csproj"), "<Project />");
+        WriteCloudJson(directory: project);
+
+        SchemaTarget target = SchemaTargetResolver.Resolve(new SchemaTargetSettings { Environment = "Live" }, _environment);
+
+        Assert.That(target.BaseUrl, Is.EqualTo(new Uri("https://live.example.com/")));
+        Assert.That(target.Credentials.Source, Is.EqualTo("umbraco-cloud.json"));
+    }
+
+    [Test]
     public void Resolve_PrefersEnvironmentVariablesOverFiles()
     {
         WriteCloudJson();
@@ -168,20 +203,24 @@ public class SchemaTargetResolverTests
 
     private static string Key(SchemaTarget target) => Encoding.UTF8.GetString(target.Credentials.Key);
 
-    private void WriteCloudJson()
-        => File.WriteAllText(Path.Combine(_directory, "umbraco-cloud.json"), $$"""
+    private void WriteCloudJson(string[]? environments = null, string? directory = null)
+    {
+        string[] workspaces =
+        [
+            $$"""{ "Id": "{{Guid.NewGuid()}}", "Name": "Development", "Type": "development", "Url": "https://dev.example.com" }""",
+            $$"""{ "Id": "{{Guid.NewGuid()}}", "Name": "Live", "Type": "live", "Url": "https://live.example.com/" }""",
+        ];
+        IEnumerable<string> included = workspaces.Where(workspace => environments is null || environments.Any(name => workspace.Contains($"\"Name\": \"{name}\"", StringComparison.Ordinal)));
+
+        File.WriteAllText(Path.Combine(directory ?? _directory, "umbraco-cloud.json"), $$"""
             {
               "Deploy": {
                 "Settings": { "ApiSecret": "{{CloudSecret}}" },
-                "Project": {
-                  "Workspaces": [
-                    { "Id": "{{Guid.NewGuid()}}", "Name": "Development", "Type": "development", "Url": "https://dev.example.com" },
-                    { "Id": "{{Guid.NewGuid()}}", "Name": "Live", "Type": "live", "Url": "https://live.example.com/" }
-                  ]
-                }
+                "Project": { "Workspaces": [ {{string.Join(", ", included)}} ] }
               }
             }
             """);
+    }
 
     private void WriteAppSettings()
         => File.WriteAllText(Path.Combine(_directory, "appsettings.json"), $$"""

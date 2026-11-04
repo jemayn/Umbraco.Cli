@@ -69,22 +69,28 @@ These commands use the [Umbraco Cloud CI/CD API](https://docs.umbraco.com/umbrac
 | `--project-id` | `UMBRACO_CLOUD_PROJECT_ID` |
 | | `UMBRACO_CLOUD_API_KEY` |
 
-When neither gives the project ID, it's read from `Deploy:Project:Id` in `umbraco-cloud.json` (`umbraco deploy init --project-id` sets it): `--config` points at the file or a folder containing it, and defaults to the uploaded `--path` (at its root for published output, or in the Umbraco project that its `.umbraco` file points at for source code). For example, to deploy an uploaded artifact: `umbraco cloud deployments deploy --artifact-id <id> --environment live --config publish`.
+When neither gives the project ID, it's read from `Deploy:Project:Id` in `umbraco-cloud.json` (`umbraco deploy init --project-id` sets it): `--config` points at the file or a folder containing it, and defaults to the uploaded `--path` (at its root for published output, or in the Umbraco project that its `.umbraco` file points at for source code), else to the Umbraco project of the git repository you run the command in (found from the current directory up to the repository root, or as the single project with an `umbraco-cloud.json` below it). So in the repository of your site, the project ID never needs to be given.
 
 Deploy source code (a Git deployment) or published output (an Artifact deployment) in one step, waiting until the deployment completes or fails:
 
 ```sh
-umbraco cloud deployments deploy --path . --environment dev
+# In a repository with a .umbraco file, the source code of the repository is deployed by default
+umbraco cloud deployments deploy --environment dev
+
+# Published output
+dotnet publish src/MySite --configuration Release --output publish
+umbraco cloud deployments deploy --path publish --environment dev
 ```
 
-Or upload first and deploy later:
+Or upload first and deploy later, for example in separate pipeline jobs. Results are written to stdout (progress and errors to stderr), so `-o json` gives one JSON object to read the artifact ID from:
 
 ```sh
-artifactId=$(umbraco cloud deployments upload --file site.zip -o json | jq -r .artifactId)
+artifactId=$(umbraco cloud deployments upload --path publish -o json | jq -r .artifactId)
 umbraco cloud deployments deploy --artifact-id "$artifactId" --environment stage --no-wait
-umbraco cloud deployments show <deployment-id> --wait
+umbraco cloud deployments show --wait
 ```
 
+- `deployments show` shows the latest deployment (to the environment of `--environment`, when given) unless you pass a deployment ID.
 - `--path` zips a directory. The deployment type is detected like Umbraco Cloud does: `Umbraco.Core.dll` at the root means published output (all files are included), a project or solution file means source code (the files git would commit are included, so `.gitignore` is honoured). Use `--type git|artifact` to override.
 - Some files are never deployed, also when git would commit them: environment files (`.env`, `.env.*`), local SQLite databases (`*.sqlite.db`), and Umbraco's logs and temporary files (`umbraco/Logs`, `umbraco/Data/TEMP`). The files left out are listed.
 - A Git deployment needs the `.umbraco` file of your Umbraco Cloud repository at its root, unless you deploy with `--skip-preserve-umbraco-cloud-json`.
@@ -163,9 +169,9 @@ umbraco deploy schema show --url https://www.example.com --wait   # the current 
 
 | Option | Environment variable | Meaning |
 |---|---|---|
-| `--environment`, `-e` | | The Environment's name in the Umbraco Deploy configuration (`Workspaces`) in `--config` |
+| `--environment`, `-e` | | The Environment's name in the Umbraco Deploy configuration (`Workspaces`) in `--config` (default: the only configured Environment, when there's one) |
 | `--url` | | The Environment's URL, instead of `--environment` |
-| `--config` | | The `appsettings.json` or `umbraco-cloud.json`, or the folder containing them (default: the current directory) |
+| `--config` | | The `appsettings.json` or `umbraco-cloud.json`, or the folder containing them (default: the current directory when it has them, else the Umbraco project with an `umbraco-cloud.json` in the git repository) |
 | | `UMBRACO_DEPLOY_API_SECRET` | The ApiSecret (default: the one in `--config`) |
 | | `UMBRACO_DEPLOY_API_KEY` | The obsolete ApiKey, instead of an ApiSecret |
 

@@ -27,10 +27,24 @@ internal sealed class ShowCommandHandler
     public async Task<int> HandleAsync(ShowCommandSettings settings, CancellationToken cancellationToken)
     {
         CloudCredentials credentials = CloudCredentialsResolver.Resolve(settings.ProjectId, _environment, settings.Config);
+        string deploymentId = settings.DeploymentId ?? await GetLatestDeploymentIdAsync(credentials, settings.Environment, cancellationToken);
         DeploymentResponse deployment = settings.Wait
-            ? await _waiter.WaitAsync(credentials, settings.DeploymentId, settings.Timeout, cancellationToken)
-            : await _cloudApiClient.GetDeploymentAsync(credentials, settings.DeploymentId, lastModifiedUtc: null, cancellationToken);
+            ? await _waiter.WaitAsync(credentials, deploymentId, settings.Timeout, cancellationToken)
+            : await _cloudApiClient.GetDeploymentAsync(credentials, deploymentId, lastModifiedUtc: null, cancellationToken);
 
         return DeploymentResultWriter.Write(deployment, _output, _reporter);
+    }
+
+    private async Task<string> GetLatestDeploymentIdAsync(CloudCredentials credentials, string? environmentAlias, CancellationToken cancellationToken)
+    {
+        string? deploymentId = await _cloudApiClient.GetLatestDeploymentIdAsync(credentials, environmentAlias, cancellationToken);
+        string target = environmentAlias is null ? string.Empty : $" to {environmentAlias}";
+        if (deploymentId is null)
+        {
+            throw new CliException($"Umbraco Cloud has no deployments{target} for this project.", ExitCodes.Error, "Only deployments started through the CI/CD API are listed.");
+        }
+
+        _reporter.Info($"Showing the latest deployment{target}, {deploymentId}.");
+        return deploymentId;
     }
 }

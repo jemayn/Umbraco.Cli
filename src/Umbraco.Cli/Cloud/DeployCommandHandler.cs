@@ -41,7 +41,8 @@ internal sealed class DeployCommandHandler
 
     public async Task<int> HandleAsync(DeployCommandSettings settings, CancellationToken cancellationToken)
     {
-        CloudCredentials credentials = CloudCredentialsResolver.Resolve(settings.ProjectId, _environment, settings.Config, settings.Source?.Directory);
+        ArtifactSource? source = settings.ArtifactId is null ? settings.Source!.WithDefault(_environment.CurrentDirectory) : null;
+        CloudCredentials credentials = CloudCredentialsResolver.Resolve(settings.ProjectId, _environment, settings.Config, source?.Directory);
 
         string? uploadedArtifactId = null;
         string artifactId;
@@ -51,7 +52,7 @@ internal sealed class DeployCommandHandler
         }
         else
         {
-            ArtifactResponse artifact = await _uploader.UploadAsync(credentials, settings.Source!, requireDotUmbraco: settings.SkipPreserveUmbracoCloudJson is false, cancellationToken);
+            ArtifactResponse artifact = await _uploader.UploadAsync(credentials, source!, requireDotUmbraco: settings.SkipPreserveUmbracoCloudJson is false, cancellationToken);
             _reporter.Info($"Artifact {artifact.ArtifactId} uploaded.");
             artifactId = uploadedArtifactId = artifact.ArtifactId;
         }
