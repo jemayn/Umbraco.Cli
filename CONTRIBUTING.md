@@ -71,3 +71,9 @@ dotnet tool update --global Umbraco.Cli --add-source artifacts --prerelease
 ## Releases
 
 Releases are made by the maintainers. Versions are calculated by [Nerdbank.GitVersioning](https://github.com/dotnet/Nerdbank.GitVersioning) from [version.json](version.json): releases are prepared on a `release/<version>` branch and tagged `release-<version>`.
+
+The build and release pipeline runs in Umbraco's Azure DevOps ([devops/azure-pipelines.yml](devops/azure-pipelines.yml)):
+
+- Pull requests are built and tested on Linux and Windows.
+- Every build of `develop`, `release/*` and `main` (and their `v*/` variants) is pushed to the Umbraco pre-releases feed on MyGet.
+- Publishing a GitHub release creates its `release-<version>` tag. The pipeline checks that the tag matches the version, and after an approval pushes the package to NuGet and uploads the SBOM to Dependency-Track.

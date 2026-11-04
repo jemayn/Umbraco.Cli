@@ -19,6 +19,12 @@ dotnet tool install --global Umbraco.Cli
 umbraco --help
 ```
 
+To try the latest build of `develop`, install it from the Umbraco pre-releases feed on MyGet:
+
+```sh
+dotnet tool update --global Umbraco.Cli --prerelease --add-source https://www.myget.org/F/umbracoprereleases/api/v3/index.json
+```
+
 ## Preparing an Umbraco project for Umbraco Cloud
 
 `umbraco cloud init` adds the Umbraco Cloud packages (`Umbraco.Cloud.Cms`, `Umbraco.Cloud.StorageProviders.AzureBlob` and `Umbraco.Deploy.Cloud`) to an Umbraco project, with versions compatible with its Umbraco CMS version, plus the Umbraco Cloud licence settings and `umbraco-cloud.json`. Run it in the project's directory (or use `--project`); Umbraco 17 and later are supported.
