@@ -99,14 +99,14 @@ internal static class SchemaCommands
     {
         public Option<string> Environment { get; } = new("--environment", "-e")
         {
-            Description = "The name of the target Environment, as configured for Umbraco Deploy in --config.",
+            Description = "The name of the target Environment, as configured for Umbraco Deploy in --config (default: the only configured one).",
         };
 
         public Option<string> Url { get; } = new("--url") { Description = "The URL of the target Environment, instead of --environment." };
 
         public Option<string> Config { get; } = new("--config")
         {
-            Description = $"The {SchemaTargetResolver.AppSettingsFileName} or {SchemaTargetResolver.UmbracoCloudFileName} of the Umbraco project to read the Environments and the ApiSecret from, or a folder containing them, such as the published output (default: the current directory).",
+            Description = $"The {SchemaTargetResolver.AppSettingsFileName} or {SchemaTargetResolver.UmbracoCloudFileName} of the Umbraco project to read the Environments and the ApiSecret from, or a folder containing them, such as the published output (default: the current directory, or the Umbraco project in the repository).",
         };
 
         public void AddTo(Command command)
@@ -117,9 +117,9 @@ internal static class SchemaCommands
 
             command.Validators.Add(result =>
             {
-                if ((result.GetValue(Environment) is null) == (result.GetValue(Url) is null))
+                if (result.GetValue(Environment) is not null && result.GetValue(Url) is not null)
                 {
-                    result.AddError("Specify exactly one of --environment or --url.");
+                    result.AddError("Specify only one of --environment or --url.");
                 }
             });
         }

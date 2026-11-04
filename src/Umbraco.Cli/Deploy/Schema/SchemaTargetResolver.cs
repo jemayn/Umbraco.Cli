@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Umbraco.Cli.Cloud;
 using Umbraco.Cli.Deploy.Configuration;
 using Umbraco.Cli.Infrastructure;
 using Umbraco.Cli.Infrastructure.Json;
@@ -34,7 +35,7 @@ internal static class SchemaTargetResolver
 
     public static SchemaTarget Resolve(SchemaTargetSettings settings, IEnvironment environment)
     {
-        string config = Path.GetFullPath(settings.Config ?? environment.CurrentDirectory, environment.CurrentDirectory);
+        string config = Path.GetFullPath(settings.Config ?? FindConfig(environment.CurrentDirectory), environment.CurrentDirectory);
         JsonDocumentEditor? cloud;
         JsonDocumentEditor? appSettings;
         if (File.Exists(config))
@@ -53,34 +54,51 @@ internal static class SchemaTargetResolver
             throw new UsageException($"'{config}' doesn't exist.", ConfigHint);
         }
 
-        return new SchemaTarget(ResolveUrl(settings, cloud, appSettings, config), settings.Url is null ? settings.Environment : null, ResolveCredentials(environment, cloud, appSettings));
+        (Uri baseUrl, string? name) = ResolveUrl(settings, cloud, appSettings, config);
+        return new SchemaTarget(baseUrl, name, ResolveCredentials(environment, cloud, appSettings));
     }
 
-    private static Uri ResolveUrl(SchemaTargetSettings settings, JsonDocumentEditor? cloud, JsonDocumentEditor? appSettings, string config)
+    /// <summary>
+    /// Gets the current directory when it has configuration files, else the directory of the Umbraco project in its repository (when there's one with an
+    /// <c>umbraco-cloud.json</c>), else the current directory.
+    /// </summary>
+    private static string FindConfig(string currentDirectory)
+    {
+        if (File.Exists(Path.Combine(currentDirectory, AppSettingsFileName)) || File.Exists(Path.Combine(currentDirectory, UmbracoCloudFileName)))
+        {
+            return currentDirectory;
+        }
+
+        return UmbracoCloudJsonProjectId.Discover(currentDirectory) is string discovered ? Path.GetDirectoryName(discovered)! : currentDirectory;
+    }
+
+    /// <returns>The base URL, and the name of the Environment when it wasn't given by URL.</returns>
+    private static (Uri BaseUrl, string? Name) ResolveUrl(SchemaTargetSettings settings, JsonDocumentEditor? cloud, JsonDocumentEditor? appSettings, string config)
     {
         if (settings.Url is string url)
         {
-            return ToBaseUrl(url, "--url");
+            return (ToBaseUrl(url, "--url"), null);
         }
 
-        string name = settings.Environment ?? throw new UsageException("No target Environment was specified.", "Use --environment or --url.");
         WorkspaceEntry[] workspaces =
         [
             .. WorkspaceList.Read(cloud?.GetNode(CloudWorkspaces)),
             .. WorkspaceList.Read(appSettings?.GetNode(AppSettingsWorkspaces)),
         ];
+        string[] names = workspaces.Select(entry => entry.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        string configured = names.Length == 0 ? $"No Environments are configured in '{config}'" : $"The configured Environments are {string.Join(", ", names)}";
 
-        WorkspaceEntry? workspace = workspaces.FirstOrDefault(entry => string.Equals(entry.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (workspace is null)
-        {
-            string configured = workspaces.Length == 0
-                ? $"No Environments are configured in '{config}'"
-                : $"The configured Environments are {string.Join(", ", workspaces.Select(entry => entry.Name).Distinct(StringComparer.OrdinalIgnoreCase))}";
+        // A single configured Environment is the default target
+        string name = settings.Environment ?? (names.Length == 1
+            ? names[0]
+            : throw new UsageException($"No target Environment was specified. {configured}.", "Use --environment or --url."));
 
-            throw new UsageException($"No Environment named '{name}' is configured. {configured}.", "Use --config with the folder of the Umbraco project, --url with the Environment's URL, or 'umbraco deploy init --environment' to configure it.");
-        }
+        WorkspaceEntry workspace = workspaces.FirstOrDefault(entry => string.Equals(entry.Name, name, StringComparison.OrdinalIgnoreCase))
+            ?? throw new UsageException(
+                $"No Environment named '{name}' is configured. {configured}.",
+                "Use --config with the folder of the Umbraco project, --url with the Environment's URL, or 'umbraco deploy init --environment' to configure it.");
 
-        return ToBaseUrl(workspace.Url, $"Environment '{workspace.Name}'");
+        return (ToBaseUrl(workspace.Url, $"Environment '{workspace.Name}'"), name);
     }
 
     private static Uri ToBaseUrl(string url, string source)

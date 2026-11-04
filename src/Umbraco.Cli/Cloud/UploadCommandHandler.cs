@@ -23,8 +23,9 @@ internal sealed class UploadCommandHandler
 
     public async Task<int> HandleAsync(UploadCommandSettings settings, CancellationToken cancellationToken)
     {
-        CloudCredentials credentials = CloudCredentialsResolver.Resolve(settings.ProjectId, _environment, settings.Config, settings.Source.Directory);
-        ArtifactResponse artifact = await _uploader.UploadAsync(credentials, settings.Source, requireDotUmbraco: false, cancellationToken);
+        ArtifactSource source = settings.Source.WithDefault(_environment.CurrentDirectory);
+        CloudCredentials credentials = CloudCredentialsResolver.Resolve(settings.ProjectId, _environment, settings.Config, source.Directory);
+        ArtifactResponse artifact = await _uploader.UploadAsync(credentials, source, requireDotUmbraco: false, cancellationToken);
 
         _output.Write(artifact, CliJsonContext.Default.ArtifactResponse, result => $"Artifact {result.ArtifactId} uploaded ({ByteSize.Format(result.FileSize)}).");
         return ExitCodes.Success;

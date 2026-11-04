@@ -29,7 +29,14 @@ internal static class CloudCommands
         ArtifactOptions artifact = new();
 
         var command = new Command("upload", "Upload a zip file or directory as an artifact.") { projectId, config };
-        artifact.AddTo(command, required: true);
+        artifact.AddTo(command);
+        command.Validators.Add(result =>
+        {
+            if (result.GetValue(artifact.File) is not null && result.GetValue(artifact.Path) is not null)
+            {
+                result.AddError("Specify only one of --file or --path.");
+            }
+        });
 
         command.SetAction((parseResult, cancellationToken) => services()
             .GetRequiredService<UploadCommandHandler>()
@@ -71,13 +78,17 @@ internal static class CloudCommands
             noWait,
             timeout,
         };
-        artifact.AddTo(command, required: false);
+        artifact.AddTo(command);
         command.Validators.Add(result =>
         {
             int sources = (result.GetValue(artifactId) is null ? 0 : 1) + (result.GetValue(artifact.File) is null ? 0 : 1) + (result.GetValue(artifact.Path) is null ? 0 : 1);
-            if (sources != 1)
+            if (sources > 1)
             {
-                result.AddError("Specify exactly one of --artifact-id, --file or --path.");
+                result.AddError("Specify only one of --artifact-id, --file or --path.");
+            }
+            else if (result.GetValue(artifactId) is not null && result.GetValue(artifact.Type) is not null)
+            {
+                result.AddError("--type can't be used with --artifact-id.");
             }
         });
 
@@ -109,19 +120,29 @@ internal static class CloudCommands
     {
         Option<string> projectId = CreateProjectIdOption(fromPath: false);
         Option<string> config = CreateConfigOption(fromPath: false);
-        var deploymentId = new Argument<string>("deployment-id") { Description = "The ID of the deployment." };
+        var deploymentId = new Argument<string>("deployment-id") { Description = "The ID of the deployment (default: the latest one).", Arity = ArgumentArity.ZeroOrOne };
+        var environment = new Option<string>("--environment", "-e") { Description = "Show the latest deployment to the environment with this alias, instead of a deployment ID." };
         var wait = new Option<bool>("--wait") { Description = "Wait until the deployment has completed or failed." };
         Option<TimeSpan> timeout = CreateTimeoutOption();
 
-        var command = new Command("show", "Show the status of a deployment.") { deploymentId, projectId, config, wait, timeout };
+        var command = new Command("show", "Show the status of a deployment.") { deploymentId, projectId, config, environment, wait, timeout };
+        command.Validators.Add(result =>
+        {
+            if (result.GetValue(deploymentId) is not null && result.GetValue(environment) is not null)
+            {
+                result.AddError("Specify only one of a deployment ID or --environment.");
+            }
+        });
+
         command.SetAction((parseResult, cancellationToken) =>
         {
             var settings = new ShowCommandSettings(
                 parseResult.GetValue(projectId),
-                parseResult.GetRequiredValue(deploymentId),
+                parseResult.GetValue(deploymentId),
                 parseResult.GetValue(wait),
                 parseResult.GetValue(timeout),
-                parseResult.GetValue(config));
+                parseResult.GetValue(config),
+                parseResult.GetValue(environment));
 
             return services().GetRequiredService<ShowCommandHandler>().HandleAsync(settings, cancellationToken);
         });
@@ -132,15 +153,15 @@ internal static class CloudCommands
     private static Option<string> CreateProjectIdOption(bool fromPath) => new("--project-id")
     {
         Description = fromPath
-            ? $"The Umbraco Cloud project ID [env: {CloudCredentialsResolver.ProjectIdVariable}] (default: Deploy:Project:Id in the umbraco-cloud.json of --config or --path)."
-            : $"The Umbraco Cloud project ID [env: {CloudCredentialsResolver.ProjectIdVariable}] (default: Deploy:Project:Id in the umbraco-cloud.json of --config).",
+            ? $"The Umbraco Cloud project ID [env: {CloudCredentialsResolver.ProjectIdVariable}] (default: Deploy:Project:Id in the umbraco-cloud.json of --config, --path or the Umbraco project in the repository)."
+            : $"The Umbraco Cloud project ID [env: {CloudCredentialsResolver.ProjectIdVariable}] (default: Deploy:Project:Id in the umbraco-cloud.json of --config or the Umbraco project in the repository).",
     };
 
     private static Option<string> CreateConfigOption(bool fromPath) => new("--config")
     {
         Description = fromPath
-            ? "The umbraco-cloud.json to read the project ID from, or a folder containing it (default: the one in --path)."
-            : "The umbraco-cloud.json to read the project ID from, or a folder containing it.",
+            ? "The umbraco-cloud.json to read the project ID from, or a folder containing it (default: the one in --path, else the one of the Umbraco project in the repository)."
+            : "The umbraco-cloud.json to read the project ID from, or a folder containing it (default: the one of the Umbraco project in the repository).",
     };
 
     private static Option<TimeSpan> CreateTimeoutOption()
@@ -153,18 +174,21 @@ internal static class CloudCommands
     {
         public Option<string> File { get; } = new("--file", "-f") { Description = "A zip file to upload as-is." };
 
-        public Option<string> Path { get; } = new("--path", "-p") { Description = "A directory to zip and upload (source code for a Git deployment, published output for an Artifact deployment)." };
+        public Option<string> Path { get; } = new("--path", "-p")
+        {
+            Description = "A directory to zip and upload: source code for a Git deployment, published output for an Artifact deployment (default: the repository, when it has a .umbraco file).",
+        };
 
         public Option<string> Type { get; } = new Option<string>("--type")
         {
-            Description = "The deployment type of --path: git (source code) or artifact (published output); detected like Umbraco Cloud does when not specified.",
+            Description = "The deployment type of the directory: git (source code) or artifact (published output); detected like Umbraco Cloud does when not specified.",
         }.AcceptOnlyFromAmong("git", "artifact");
 
         public Option<string> Description { get; } = new("--description") { Description = "A description stored with the artifact." };
 
         public Option<string> Version { get; } = new("--version") { Description = "A version stored with the artifact." };
 
-        public void AddTo(Command command, bool required)
+        public void AddTo(Command command)
         {
             command.Options.Add(File);
             command.Options.Add(Path);
@@ -172,22 +196,11 @@ internal static class CloudCommands
             command.Options.Add(Description);
             command.Options.Add(Version);
 
-            if (required)
-            {
-                command.Validators.Add(result =>
-                {
-                    if ((result.GetValue(File) is null) == (result.GetValue(Path) is null))
-                    {
-                        result.AddError("Specify exactly one of --file or --path.");
-                    }
-                });
-            }
-
             command.Validators.Add(result =>
             {
-                if (result.GetValue(Type) is not null && result.GetValue(Path) is null)
+                if (result.GetValue(Type) is not null && result.GetValue(File) is not null)
                 {
-                    result.AddError("--type can only be used with --path.");
+                    result.AddError("--type can't be used with --file.");
                 }
             });
         }

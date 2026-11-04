@@ -12,7 +12,7 @@ internal static class SecretsCommands
     {
         var projectId = new Option<string>("--project-id")
         {
-            Description = $"The Umbraco Cloud project ID [env: {CloudCredentialsResolver.ProjectIdVariable}] (default: Deploy:Project:Id in the umbraco-cloud.json of the current directory).",
+            Description = $"The Umbraco Cloud project ID [env: {CloudCredentialsResolver.ProjectIdVariable}] (default: Deploy:Project:Id in the umbraco-cloud.json of the Umbraco project in the repository).",
         };
 
         var pull = new Command(

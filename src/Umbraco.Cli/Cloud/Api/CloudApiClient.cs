@@ -172,6 +172,22 @@ internal sealed class CloudApiClient : ICloudApiClient
         }
     }
 
+    public async Task<string?> GetLatestDeploymentIdAsync(CloudCredentials credentials, string? environmentAlias, CancellationToken cancellationToken)
+    {
+        // Deployments are listed newest first
+        string path = "deployments?skip=0&take=1";
+        if (string.IsNullOrEmpty(environmentAlias) is false)
+        {
+            path += "&targetEnvironmentAlias=" + Uri.EscapeDataString(environmentAlias);
+        }
+
+        using HttpRequestMessage request = CreateRequest(HttpMethod.Get, credentials, path);
+        using CancellationTokenSource timeout = CreateTimeout(cancellationToken);
+        using HttpResponseMessage response = await _httpClient.SendAsync(request, timeout.Token);
+        DeploymentListResponse deployments = await ReadAsync(response, CloudJsonContext.Default.DeploymentListResponse, cancellationToken);
+        return deployments.Data.FirstOrDefault()?.Id is { Length: > 0 } id ? id : null;
+    }
+
     public async Task<IReadOnlyDictionary<string, string>> GetLocalDevelopmentValuesAsync(CloudCredentials credentials, CancellationToken cancellationToken)
     {
         using HttpRequestMessage request = CreateRequest(HttpMethod.Get, credentials, LocalDevelopmentValuesPath);

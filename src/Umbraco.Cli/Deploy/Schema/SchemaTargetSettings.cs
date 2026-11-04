@@ -6,7 +6,7 @@ namespace Umbraco.Cli.Deploy.Schema;
 internal sealed record SchemaTargetSettings
 {
     /// <summary>
-    /// Gets the <c>appsettings.json</c> or <c>umbraco-cloud.json</c> to read the credentials and Environments from, or a folder containing them (default: the current directory).
+    /// Gets the <c>appsettings.json</c> or <c>umbraco-cloud.json</c> to read the credentials and Environments from, or a folder containing them (default: the current directory, or the Umbraco project in the repository).
     /// </summary>
     public string? Config { get; init; }
 
