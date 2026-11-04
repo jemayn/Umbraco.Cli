@@ -1,0 +1,79 @@
+# A Git deployment with the Umbraco CLI: the flow of the documented sample
+# https://github.com/umbraco/Umbraco.Cloud.CICDFlow.Samples/blob/main/V2/powershell/github/advanced/main-more-targets.yml,
+# using the CLI instead of the PowerShell scripts for the artifact and the deployment.
+name: pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - flexible
+  workflow_dispatch:
+
+# Deploy one push at a time. A newer push waits, instead of cancelling a deployment that's running.
+concurrency:
+  group: umbraco-cloud-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # The only secret the CLI needs. The CLI reads it from the environment (it has no option for it), so it isn't echoed in the logs.
+  UMBRACO_CLOUD_API_KEY: ${{ secrets.UMBRACO_CLOUD_API_KEY }}
+  # Optional: without it, the CLI reads Deploy:Project:Id from the umbraco-cloud.json of the Umbraco project in the repository.
+  UMBRACO_CLOUD_PROJECT_ID: ${{ secrets.PROJECT_ID }}
+
+jobs:
+  # Get changes from Umbraco Cloud. The CLI has no command for this yet, so this still uses the sample's reusable workflow
+  # (cloud-sync.yml and its PowerShell scripts).
+  cloud-sync:
+    name: Umbraco Cloud Sync
+    # Like the sample, only deploy the main and flexible branches
+    if: github.ref_name == 'main' || github.ref_name == 'flexible'
+    uses: ./.github/workflows/cloud-sync.yml
+    secrets:
+      projectId: ${{ secrets.PROJECT_ID }}
+      umbracoCloudApiKey: ${{ secrets.UMBRACO_CLOUD_API_KEY }}
+    with:
+      targetEnvironmentAlias: ${{ github.ref_name == 'flexible' && vars.FLEXIBLE_ENVIRONMENT_ALIAS || vars.TARGET_ENVIRONMENT_ALIAS }}
+
+  # Zip, upload and deploy, then wait for the deployment to finish: one CLI command instead of the cloud-artifact and cloud-deployment workflows
+  cloud-deployment:
+    name: Deploy to Umbraco Cloud
+    needs: cloud-sync
+    runs-on: ubuntu-latest
+    env:
+      # The left-most mainline environment for main, the flexible environment for flexible
+      TARGET_ENVIRONMENT_ALIAS: ${{ github.ref_name == 'flexible' && vars.FLEXIBLE_ENVIRONMENT_ALIAS || vars.TARGET_ENVIRONMENT_ALIAS }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The commit with the changes from Umbraco Cloud, when the sync pushed one
+          ref: ${{ needs.cloud-sync.outputs.newSha }}
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install the Umbraco CLI
+        run: dotnet tool install --global Umbraco.Cli --prerelease
+
+      # As in the sample: use a .gitignore that doesn't ignore built frontend assets. The CLI zips the files git would commit, so it
+      # follows the .gitignore, and it always leaves out .env files, local databases, logs and temporary files (no cloud.zipignore needed).
+      - name: Use the Umbraco Cloud .gitignore
+        run: if [ -f cloud.gitignore ]; then cp cloud.gitignore .gitignore; fi
+
+      # The repository has a .umbraco file, so the CLI zips the repository as a Git deployment, uploads it, starts the deployment
+      # and waits for it (15 minutes by default, change it with --timeout 30m). It fails the step when the deployment fails.
+      #
+      # The sample's deployment variables are options, all off by default:
+      #   noBuildAndRestore: 1             -> --no-build-and-restore
+      #   skipVersionCheck: 1              -> --skip-version-check
+      #   skipPreserveUmbracoCloudJson: 1  -> --skip-preserve-umbraco-cloud-json
+      #   runSchemaExtraction: 0           -> --no-schema-extraction
+      # The commit message on Umbraco Cloud is the subject of the deployed commit, unless you set one with --message.
+      - name: Deploy
+        run: >
+          umbraco cloud deployments deploy
+          --environment "$TARGET_ENVIRONMENT_ALIAS"
+          --description "Artifact for ${{ github.run_number }}"
+          --version "${{ github.run_number }}"
+          --no-progress
