@@ -1,0 +1,88 @@
+# An Artifact deployment with the Umbraco CLI: publish and upload once, then deploy the same artifact to each environment.
+name: Deploy to Umbraco Cloud
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: umbraco-cloud
+  cancel-in-progress: false
+
+env:
+  UMBRACO_CLOUD_API_KEY: ${{ secrets.UMBRACO_CLOUD_API_KEY }}
+  # Needed in the deploy jobs, which don't check out the repository to find umbraco-cloud.json
+  UMBRACO_CLOUD_PROJECT_ID: ${{ vars.UMBRACO_CLOUD_PROJECT_ID }}
+
+jobs:
+  build:
+    name: Publish and upload
+    runs-on: ubuntu-latest
+    outputs:
+      artifactId: ${{ steps.upload.outputs.artifactId }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish
+        run: dotnet publish src/MySite --configuration Release --output publish
+
+      - name: Install the Umbraco CLI
+        run: dotnet tool install --global Umbraco.Cli --prerelease
+
+      # The result goes to stdout (JSON with -o json) and progress goes to stderr, so the artifact ID can be passed on to the next jobs.
+      # An explicit "shell: bash" turns on pipefail, so a failed upload fails the step instead of passing "null" on.
+      - name: Upload
+        id: upload
+        shell: bash
+        run: |
+          artifactId=$(umbraco cloud deployments upload --path publish --version "${{ github.run_number }}" --no-progress -o json | jq -r .artifactId)
+          echo "artifactId=$artifactId" >> "$GITHUB_OUTPUT"
+
+  deploy-development:
+    name: Deploy to Development
+    needs: build
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install the Umbraco CLI
+        run: dotnet tool install --global Umbraco.Cli --prerelease
+
+      - name: Deploy
+        run: >
+          umbraco cloud deployments deploy
+          --artifact-id "${{ needs.build.outputs.artifactId }}"
+          --environment "${{ vars.DEVELOPMENT_ENVIRONMENT_ALIAS }}"
+          --message "Run number ${{ github.run_number }}"
+          --no-progress
+
+  # The same artifact goes on to Live. Add required reviewers to the "live" GitHub environment to approve it first.
+  deploy-live:
+    name: Deploy to Live
+    needs: [build, deploy-development]
+    runs-on: ubuntu-latest
+    environment: live
+    steps:
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install the Umbraco CLI
+        run: dotnet tool install --global Umbraco.Cli --prerelease
+
+      - name: Deploy
+        run: >
+          umbraco cloud deployments deploy
+          --artifact-id "${{ needs.build.outputs.artifactId }}"
+          --environment "${{ vars.LIVE_ENVIRONMENT_ALIAS }}"
+          --message "Run number ${{ github.run_number }}"
+          --no-progress
